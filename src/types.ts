@@ -1,5 +1,5 @@
 // Roles and Users
-export type Role = "مربی" | "سرمربی" | "سوپروایزر" | "تیم_تخصصی" | "ادمین" | "درمانگر";
+export type Role = "والد" | "مربی" | "سرمربی" | "سوپروایزر" | "تیم_تخصصی" | "ادمین" | "درمانگر";
 
 export interface User {
   id: string;
