@@ -115,33 +115,47 @@ centersRouter.get("/enrollments", (req, res) => {
 
 // POST new enrollment (Assignment)
 centersRouter.post("/enrollments", (req, res) => {
+  const actor = db.data.users.find(user => user.id === req.body?.createdBy);
+  if (!actor || !["ادمین", "تیم_تخصصی", "سرمربی"].includes(actor.role)) {
+    return res.status(403).json({ success: false, message: "تخصیص کودک فقط برای سرمربی، تیم تخصصی و ادمین مجاز است." });
+  }
+  const child = db.data.children.find(item => item.id === req.body?.childId);
+  const center = db.data.centers.find(item => item.id === req.body?.centerId);
+  if (!child || !center) return res.status(400).json({ success: false, message: "کودک و مرکز معتبر انتخاب کنید." });
+  if (actor.role === "سرمربی" && (!(actor.centerIds || []).includes(center.id) || !(actor.centerIds || []).includes(child.currentCenterId))) {
+    return res.status(403).json({ success: false, message: "شما فقط به کودکان و مراکز تحت پوشش خود دسترسی دارید." });
+  }
+  const selectedClass = req.body?.classId ? db.data.classes?.find(item => item.id === req.body.classId && item.centerId === center.id) : undefined;
+  if (req.body?.classId && !selectedClass) return res.status(400).json({ success: false, message: "کلاس انتخاب‌شده به مرکز انتخابی تعلق ندارد." });
+  if (actor.role === "سرمربی" && selectedClass?.supervisorId !== actor.id) return res.status(403).json({ success: false, message: "فقط کلاس‌های تحت سرپرستی خود را می‌توانید انتخاب کنید." });
+  if (!["مهد", "پیش‌دبستانی۱", "پیش‌دبستانی۲"].includes(req.body?.stage)) return res.status(400).json({ success: false, message: "مقطع انتخاب‌شده معتبر نیست." });
   if (!db.data.enrollments) {
     db.data.enrollments = [];
   }
-  
+  const now = new Date().toISOString();
+  db.data.enrollments.filter(item => item.childId === child.id && !item.toDate).forEach(item => { item.toDate = now; });
   const newEnrollment: ChildEnrollment = {
     ...req.body,
     id: uuidv4(),
+    fromDate: req.body.fromDate || now,
+    toDate: null,
   };
   
   db.data.enrollments.push(newEnrollment);
   
   // Update child's current center/class
-  const child = db.data.children.find(c => c.id === newEnrollment.childId);
-  if (child) {
-    child.currentCenterId = newEnrollment.centerId;
-    child.currentClassId = newEnrollment.classId;
-    child.currentStage = newEnrollment.stage;
-    child.updatedAt = new Date().toISOString();
-  }
+  child.currentCenterId = newEnrollment.centerId;
+  child.currentClassId = newEnrollment.classId;
+  child.currentStage = newEnrollment.stage;
+  child.updatedAt = now;
   
   db.data.auditLogs.push({
     id: uuidv4(),
     entityType: "Child",
     entityId: newEnrollment.childId,
     action: "UPDATE",
-    userId: req.body.createdBy || "system",
-    timestamp: new Date().toISOString(),
+    userId: actor.id,
+    timestamp: now,
     details: `Child assigned to center ${newEnrollment.centerId} and class ${newEnrollment.classId}`
   });
 

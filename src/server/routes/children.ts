@@ -31,6 +31,55 @@ childrenRouter.get("/:id", (req, res) => {
   }
 });
 
+const CHILD_EDIT_ROLES = ["ادمین", "تیم_تخصصی", "سرمربی"];
+
+childrenRouter.patch("/:id", (req, res) => {
+  const actor = db.data.users.find(user => user.id === req.body?.userId);
+  if (!actor || !CHILD_EDIT_ROLES.includes(actor.role)) {
+    return res.status(403).json({ success: false, message: "ویرایش پرونده فقط برای سرمربی، تیم تخصصی و ادمین مجاز است." });
+  }
+  const child = childRepository.findById(req.params.id);
+  if (!child) return res.status(404).json({ success: false, message: "پرونده کودک پیدا نشد." });
+
+  const { firstName, lastName, nationalId, birthDate, gender, parentName, parentContactPhone, centerId, classId, stage } = req.body || {};
+  const center = db.data.centers.find(item => item.id === centerId);
+  if (!center) return res.status(400).json({ success: false, message: "مرکز انتخاب‌شده معتبر نیست." });
+  if (actor.role === "سرمربی" && (!(actor.centerIds || []).includes(centerId) || !(actor.centerIds || []).includes(child.currentCenterId))) {
+    return res.status(403).json({ success: false, message: "شما فقط می‌توانید کودکان مراکز تحت پوشش خود را تخصیص دهید." });
+  }
+  const validStages = ["مهد", "پیش‌دبستانی۱", "پیش‌دبستانی۲"];
+  if (!validStages.includes(stage)) return res.status(400).json({ success: false, message: "مقطع انتخاب‌شده معتبر نیست." });
+  const selectedClass = classId ? db.data.classes?.find(item => item.id === classId && item.centerId === centerId) : undefined;
+  if (classId && !selectedClass) return res.status(400).json({ success: false, message: "کلاس انتخاب‌شده به این مرکز تعلق ندارد." });
+  if (actor.role === "سرمربی" && selectedClass?.supervisorId !== actor.id) return res.status(403).json({ success: false, message: "شما فقط می‌توانید کودک را به کلاس‌های تحت سرپرستی خود اختصاص دهید." });
+
+  if (!String(firstName || "").trim() || !String(lastName || "").trim() || !String(birthDate || "").trim() || !String(parentContactPhone || "").trim() || !["پسر", "دختر"].includes(gender)) {
+    return res.status(400).json({ success: false, message: "نام، نام خانوادگی، تاریخ تولد، جنسیت و تلفن والد الزامی است." });
+  }
+
+  const previousAssignmentChanged = child.currentCenterId !== centerId || child.currentClassId !== (classId || undefined) || child.currentStage !== stage;
+  const oldValues = `${child.currentCenterId}/${child.currentClassId || "بدون کلاس"}/${child.currentStage}`;
+  Object.assign(child, {
+    firstName: String(firstName || "").trim(), lastName: String(lastName || "").trim(),
+    nationalId: String(nationalId || "").trim(), birthDate: String(birthDate || "").trim(),
+    gender, parentName: String(parentName || "").trim(), parentContactPhone: String(parentContactPhone || "").trim(),
+    currentCenterId: centerId, currentClassId: classId || undefined, currentStage: stage,
+    updatedAt: new Date().toISOString()
+  });
+  if (previousAssignmentChanged) {
+    db.data.enrollments ||= [];
+    const now = new Date().toISOString();
+    db.data.enrollments.filter(item => item.childId === child.id && !item.toDate).forEach(item => { item.toDate = now; });
+    db.data.enrollments.push({ id: uuidv4(), childId: child.id, centerId, classId: classId || undefined, stage, fromDate: now, toDate: null });
+    db.data.auditLogs.push({ id: uuidv4(), entityType: "Child", entityId: child.id, action: "UPDATE", userId: actor.id, timestamp: now, oldValue: oldValues, newValue: `${centerId}/${classId || "بدون کلاس"}/${stage}`, details: "اطلاعات و تخصیص آموزشی پرونده ویرایش شد." });
+  } else {
+    db.data.auditLogs.push({ id: uuidv4(), entityType: "Child", entityId: child.id, action: "UPDATE", userId: actor.id, timestamp: new Date().toISOString(), details: "اطلاعات پایه پرونده ویرایش شد." });
+  }
+  childRepository.save(child);
+  db.persist();
+  res.json({ success: true, child: withEffectiveCaseStatus(child, db.data.alignments) });
+});
+
 childrenRouter.patch("/:id/archive", (req, res) => {
   const actor = db.data.users.find(user => user.id === req.body?.userId);
   if (!actor || !["ادمین", "تیم_تخصصی"].includes(actor.role)) {
@@ -56,7 +105,24 @@ childrenRouter.patch("/:id/archive", (req, res) => {
 
 childrenRouter.post("/", (req, res) => {
   try {
+    const actor = db.data.users.find(user => user.id === req.body?.createdBy);
+    if (!actor || !CHILD_EDIT_ROLES.includes(actor.role)) {
+      return res.status(403).json({ success: false, message: "ثبت کودک فقط برای سرمربی، تیم تخصصی و ادمین مجاز است." });
+    }
+    if (actor.role === "سرمربی" && !(actor.centerIds || []).includes(req.body.currentCenterId)) {
+      return res.status(403).json({ success: false, message: "شما فقط می‌توانید کودک را به مراکز تحت پوشش خود اختصاص دهید." });
+    }
+    const center = db.data.centers.find(item => item.id === req.body.currentCenterId);
+    if (!center) return res.status(400).json({ success: false, message: "انتخاب مرکز الزامی است." });
+    if (!["مهد", "پیش‌دبستانی۱", "پیش‌دبستانی۲"].includes(req.body.currentStage)) return res.status(400).json({ success: false, message: "انتخاب مقطع الزامی است." });
+    const selectedClass = req.body.currentClassId ? db.data.classes?.find(item => item.id === req.body.currentClassId && item.centerId === req.body.currentCenterId) : undefined;
+    if (req.body.currentClassId && !selectedClass) return res.status(400).json({ success: false, message: "کلاس انتخاب‌شده به این مرکز تعلق ندارد." });
+    if (actor.role === "سرمربی" && selectedClass?.supervisorId !== actor.id) return res.status(403).json({ success: false, message: "شما فقط می‌توانید کودک را به کلاس‌های تحت سرپرستی خود اختصاص دهید." });
     const child = childService.registerChild(req.body);
+    db.data.enrollments ||= [];
+    db.data.enrollments.push({ id: uuidv4(), childId: child.id, centerId: child.currentCenterId, classId: child.currentClassId, stage: child.currentStage, fromDate: child.createdAt, toDate: null });
+    db.data.auditLogs.push({ id: uuidv4(), entityType: "Child", entityId: child.id, action: "CREATE", userId: actor.id, timestamp: new Date().toISOString(), details: "پرونده کودک ایجاد شد." });
+    db.persist();
     res.json({ success: true, child });
   } catch (error: any) {
     res.status(400).json({ success: false, message: error.message });

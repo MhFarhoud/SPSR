@@ -1,8 +1,12 @@
 import React, { useState } from "react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { fetchData } from "../../api";
+import { AppData, Child, User } from "../../types";
 
-export function ChildRegistration() {
+export function ChildRegistration({ user }: { user: User }) {
   const navigate = useNavigate();
+  const [data, setData] = useState<AppData | null>(null);
   const [formData, setFormData] = useState({
     nationalId: "",
     firstName: "",
@@ -11,9 +15,14 @@ export function ChildRegistration() {
     gender: "پسر",
     parentContactPhone: "",
     parentName: "",
-    currentCenterId: "c1", // Should ideally be a dropdown fetching from /api/centers
-    currentStage: "مهد",
+    currentCenterId: "",
+    currentClassId: "",
+    currentStage: "" as Child["currentStage"] | "",
   });
+
+  useEffect(() => { fetchData().then(setData); }, []);
+  const availableCenters = (data?.centers || []).filter(center => user.role !== "سرمربی" || user.centerIds.includes(center.id));
+  const availableClasses = (data?.classes || []).filter(group => group.centerId === formData.currentCenterId && (user.role !== "سرمربی" || group.supervisorId === user.id));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,7 +48,7 @@ export function ChildRegistration() {
       const res = await fetch("/api/children", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({ ...formData, currentClassId: formData.currentClassId || undefined, createdBy: user.id })
       });
       const data = await res.json();
       if (data.success) {
@@ -122,6 +131,27 @@ export function ChildRegistration() {
           </div>
 
           <div className="border-t border-gray-100 pt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">مرکز *</label>
+              <select required value={formData.currentCenterId} onChange={e => setFormData({...formData, currentCenterId: e.target.value, currentClassId: ""})} className="w-full border border-gray-300 rounded-lg px-3 py-2">
+                <option value="">انتخاب مرکز</option>
+                {availableCenters.map(center => <option key={center.id} value={center.id}>{center.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">مقطع *</label>
+              <select required value={formData.currentStage} onChange={e => setFormData({...formData, currentStage: e.target.value as typeof formData.currentStage})} className="w-full border border-gray-300 rounded-lg px-3 py-2">
+                <option value="">انتخاب مقطع</option>
+                <option value="مهد">مهد</option><option value="پیش‌دبستانی۱">پیش‌دبستانی ۱</option><option value="پیش‌دبستانی۲">پیش‌دبستانی ۲</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">کلاس و مربی</label>
+              <select value={formData.currentClassId} onChange={e => setFormData({...formData, currentClassId: e.target.value})} className="w-full border border-gray-300 rounded-lg px-3 py-2" disabled={!formData.currentCenterId}>
+                <option value="">بدون تخصیص کلاس</option>
+                {availableClasses.map(group => { const teacher = data?.users.find(item => item.id === group.teacherId); return <option key={group.id} value={group.id}>{group.name}{teacher ? ` — ${teacher.fullName}` : " — مربی تعیین نشده"}</option>; })}
+              </select>
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">نام والد/سرپرست</label>
               <input 

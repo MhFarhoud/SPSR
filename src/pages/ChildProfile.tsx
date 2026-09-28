@@ -5,7 +5,7 @@ import { Tabs, Tab } from "../components/ui/Tabs";
 import { Badge } from "../components/ui/Badge";
 import { AssessmentScoreSummary } from "../components/AssessmentScoreSummary";
 import { Child, User, TeacherAssessment, ParentAssessment, AlignmentResult, FollowUp, Center, ClassGroup, ActionItem } from "../types";
-import { User as UserIcon, Activity, FileText, CheckSquare, Target, Settings, Plus, ListTodo, AlertTriangle } from "lucide-react";
+import { User as UserIcon, Activity, FileText, CheckSquare, Target, Settings, Plus, ListTodo, AlertTriangle, Pencil, X } from "lucide-react";
 import { calculateExactAge } from "../utils/ageCalculator";
 
 export function ChildProfile({ user }: { user?: User }) {
@@ -23,6 +23,10 @@ export function ChildProfile({ user }: { user?: User }) {
   const [centers, setCenters] = useState<Center[]>([]);
   const [classes, setClasses] = useState<ClassGroup[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [editOpen, setEditOpen] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [editForm, setEditForm] = useState({ firstName: "", lastName: "", nationalId: "", birthDate: "", gender: "پسر" as Child["gender"], parentName: "", parentContactPhone: "", centerId: "", classId: "", stage: "مهد" as Child["currentStage"] });
 
   useEffect(() => {
     fetchData().then(d => {
@@ -62,6 +66,33 @@ export function ChildProfile({ user }: { user?: User }) {
   }
 
   const exactAge = calculateExactAge(child.birthDate);
+  const canManageChild = ["ادمین", "تیم_تخصصی", "سرمربی"].includes(user?.role || "");
+  const editableCenters = centers.filter(center => user?.role !== "سرمربی" || user.centerIds.includes(center.id));
+  const editableClasses = classes.filter(group => group.centerId === editForm.centerId && (user?.role !== "سرمربی" || group.supervisorId === user.id));
+  const openEdit = () => {
+    setEditForm({ firstName: child.firstName, lastName: child.lastName, nationalId: child.nationalId || "", birthDate: child.birthDate, gender: child.gender, parentName: child.parentName || "", parentContactPhone: child.parentContactPhone, centerId: child.currentCenterId, classId: child.currentClassId || "", stage: child.currentStage });
+    setEditError("");
+    setEditOpen(true);
+  };
+  const saveChild = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setSavingEdit(true);
+    setEditError("");
+    try {
+      const response = await fetch(`/api/children/${child.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...editForm, userId: user?.id }) });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.message || "ذخیره تغییرات انجام نشد.");
+      setChild(result.child);
+      setEditOpen(false);
+      const updated = await fetchData();
+      setCenters(updated.centers || []);
+      setClasses(updated.classes || []);
+    } catch (error) {
+      setEditError(error instanceof Error ? error.message : "ذخیره تغییرات انجام نشد.");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
 
   let tabs: Tab[] = [
     { id: "overview", label: "اطلاعات پایه", icon: UserIcon },
@@ -122,9 +153,32 @@ export function ChildProfile({ user }: { user?: User }) {
               </div>
             </div>
           )}
+          {canManageChild && <button type="button" onClick={openEdit} className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"><Pencil className="h-4 w-4" /> ویرایش و تخصیص</button>}
         </div>
         <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
       </div>
+
+      {editOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-gray-900/50 p-4" role="dialog" aria-modal="true" aria-label="ویرایش پرونده کودک">
+          <form onSubmit={saveChild} className="my-8 w-full max-w-3xl space-y-5 rounded-xl bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between"><h3 className="text-xl font-bold text-gray-900">ویرایش پرونده و تخصیص آموزشی</h3><button type="button" onClick={() => setEditOpen(false)} className="rounded p-1 text-gray-500 hover:bg-gray-100" aria-label="بستن"><X className="h-5 w-5" /></button></div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <label className="text-sm font-medium">نام<input required value={editForm.firstName} onChange={e => setEditForm({...editForm, firstName:e.target.value})} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
+              <label className="text-sm font-medium">نام خانوادگی<input required value={editForm.lastName} onChange={e => setEditForm({...editForm, lastName:e.target.value})} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
+              <label className="text-sm font-medium">کد ملی<input dir="ltr" value={editForm.nationalId} onChange={e => setEditForm({...editForm, nationalId:e.target.value})} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
+              <label className="text-sm font-medium">تاریخ تولد<input required value={editForm.birthDate} onChange={e => setEditForm({...editForm, birthDate:e.target.value})} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
+              <label className="text-sm font-medium">جنسیت<select value={editForm.gender} onChange={e => setEditForm({...editForm, gender:e.target.value as Child["gender"]})} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"><option value="پسر">پسر</option><option value="دختر">دختر</option></select></label>
+              <label className="text-sm font-medium">نام والد/سرپرست<input value={editForm.parentName} onChange={e => setEditForm({...editForm, parentName:e.target.value})} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
+              <label className="text-sm font-medium">تلفن والد<input required dir="ltr" value={editForm.parentContactPhone} onChange={e => setEditForm({...editForm, parentContactPhone:e.target.value})} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2" /></label>
+              <label className="text-sm font-medium">مرکز<select required value={editForm.centerId} onChange={e => setEditForm({...editForm, centerId:e.target.value, classId:""})} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2">{editableCenters.map(center => <option key={center.id} value={center.id}>{center.name}</option>)}</select></label>
+              <label className="text-sm font-medium">مقطع<select required value={editForm.stage} onChange={e => setEditForm({...editForm, stage:e.target.value as Child["currentStage"]})} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"><option value="مهد">مهد</option><option value="پیش‌دبستانی۱">پیش‌دبستانی ۱</option><option value="پیش‌دبستانی۲">پیش‌دبستانی ۲</option></select></label>
+              <label className="text-sm font-medium">کلاس و مربی<select value={editForm.classId} onChange={e => setEditForm({...editForm, classId:e.target.value})} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2"><option value="">بدون تخصیص کلاس</option>{editableClasses.map(group => { const teacher = allUsers.find(item => item.id === group.teacherId); return <option key={group.id} value={group.id}>{group.name}{teacher ? ` — ${teacher.fullName}` : " — مربی تعیین نشده"}</option>; })}</select></label>
+            </div>
+            {editError && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{editError}</p>}
+            <div className="flex justify-end gap-3"><button type="button" onClick={() => setEditOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm">انصراف</button><button disabled={savingEdit} type="submit" className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{savingEdit ? "در حال ذخیره..." : "ذخیره تغییرات"}</button></div>
+          </form>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 min-h-[400px]">
         {activeTab === "overview" && (
