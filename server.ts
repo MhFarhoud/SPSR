@@ -9,7 +9,7 @@ import { centersRouter } from "./src/server/routes/centers";
 import { actionsRouter } from "./src/server/routes/actions";
 
 const app = express();
-const PORT = 5173;
+const DEFAULT_PORT = 5173;
 const DATA_FILE = path.join(process.cwd(), "data.json");
 
 app.use(express.json());
@@ -66,7 +66,8 @@ app.use("/api/actions", actionsRouter);
 
 // Vite middleware for development
 async function startServer() {
-  if (process.env.NODE_ENV !== "production") {
+  const isProduction = process.env.NODE_ENV === "production" || process.argv[1]?.endsWith("server.cjs");
+  if (!isProduction) {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -80,9 +81,29 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  const requestedPort = Number(process.env.PORT) || DEFAULT_PORT;
+  const mayChooseAnotherPort = !process.env.PORT;
+  const listen = (port: number): void => {
+    const server = app.listen(port, "0.0.0.0", () => {
+      const address = server.address();
+      const actualPort = typeof address === "object" && address ? address.port : port;
+      console.log(`Server running on http://localhost:${actualPort}`);
+    });
+    server.on("error", (error: NodeJS.ErrnoException) => {
+      if (error.code === "EADDRINUSE" && mayChooseAnotherPort && port < DEFAULT_PORT + 20) {
+        console.warn(`Port ${port} is busy; trying ${port + 1}...`);
+        listen(port + 1);
+        return;
+      }
+      if (error.code === "EADDRINUSE") {
+        console.error(`Port ${port} is already in use. Close the app using it or run with PORT=${port + 1}.`);
+      } else {
+        console.error("Could not start the server:", error);
+      }
+      process.exitCode = 1;
+    });
+  };
+  listen(requestedPort);
 }
 
 startServer();

@@ -5,6 +5,28 @@ import { DataTable, Column } from "../../components/ui/DataTable";
 import { Badge } from "../../components/ui/Badge";
 import { Child, CaseStatus, User } from "../../types";
 
+async function copyText(text: string): Promise<boolean> {
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // Fall through to the legacy copy path for browsers that deny clipboard access.
+    }
+  }
+
+  const input = document.createElement("textarea");
+  input.value = text;
+  input.setAttribute("readonly", "");
+  input.style.position = "fixed";
+  input.style.opacity = "0";
+  document.body.appendChild(input);
+  input.select();
+  const copied = document.execCommand("copy");
+  input.remove();
+  return copied;
+}
+
 /** PDF بخش ۲: کودکان
  * دسترسی‌ها (PDF 2.3):
  * - مربی: فقط کودکان خودش (بدون افزودن/حذف/تغییر مرکز)
@@ -85,10 +107,11 @@ export function ChildrenList({ user }: { user?: User }) {
     ...(canArchive ? [{ header: "بایگانی", accessor: (row: Child) => <button type="button" onClick={event => { event.stopPropagation(); void toggleArchive(row); }} className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-medium ${row.archived ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "bg-amber-50 text-amber-800 hover:bg-amber-100"}`}>{row.archived ? <><ArchiveRestore className="h-3.5 w-3.5" /> بازگردانی</> : <><Archive className="h-3.5 w-3.5" /> بایگانی</>}</button> }] : []),
     { header: "لینک والد", accessor: (row) => (
       <button 
-        onClick={(e) => {
+        onClick={async (e) => {
           e.stopPropagation();
-          navigator.clipboard.writeText(`${window.location.origin}/p/${row.childId}`);
-          alert("لینک کپی شد");
+          const link = `${window.location.origin}/p/${row.childId}`;
+          if (await copyText(link)) alert("لینک والد کپی شد");
+          else window.prompt("کپی خودکار در این مرورگر ممکن نیست؛ لینک را کپی کنید:", link);
         }}
         className="text-indigo-600 hover:text-indigo-800 p-1"
         title="کپی لینک اختصاصی والد"
