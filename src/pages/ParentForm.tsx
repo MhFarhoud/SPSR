@@ -66,17 +66,22 @@ const SERVICES_OPTIONS = [
   "هیچ‌کدام"
 ];
 
-export function ParentForm({ user, childIdParam, onSuccess }: { user: User, childIdParam?: string, onSuccess?: () => void }) {
+export function ParentForm({ user, childIdParam, verificationNationalId, onSuccess }: { user: User, childIdParam?: string, verificationNationalId?: string, onSuccess?: () => void }) {
   const { id: paramId } = useParams<{ id: string }>();
   const id = childIdParam || paramId;
   const navigate = useNavigate();
   
   const [childName, setChildName] = useState("");
   const [childAge, setChildAge] = useState("");
+  const [childGender, setChildGender] = useState("");
+  const [centerName, setCenterName] = useState("");
+  const [centerRegion, setCenterRegion] = useState("");
 
   const [answers, setAnswers] = useState<Record<number, number>>({});
   
   const [relationToChild, setRelationToChild] = useState<ParentAssessment["relationToChild"]>("مادر");
+  const [respondentName, setRespondentName] = useState(user.role === "والد" ? "" : user.fullName);
+  const [respondentPhone, setRespondentPhone] = useState(user.role === "والد" ? "" : user.phone);
   
   const [overallProblem, setOverallProblem] = useState<ParentAssessment["overallProblem"]>("خیر");
   const [problemAreas, setProblemAreas] = useState<Record<string, "کمی" | "قطعا" | "خیلی">>({});
@@ -101,6 +106,10 @@ export function ParentForm({ user, childIdParam, onSuccess }: { user: User, chil
       const c = data.children.find(ch => ch.id === id);
       if (c) {
         setChildName(`${c.firstName} ${c.lastName}`);
+        setChildGender(c.gender);
+        const center = data.centers.find(item => item.id === c.currentCenterId);
+        setCenterName(center?.name || "");
+        setCenterRegion(center?.region || "");
         const age = calculateExactAge(c.birthDate);
         setChildAge(age ? age.formatted : "نامشخص");
       }
@@ -140,7 +149,9 @@ export function ParentForm({ user, childIdParam, onSuccess }: { user: User, chil
     const form: ParentAssessment = {
       id: uuidv4(),
       childId: id!,
-      parentId: user.id, // Or child's parentContactPhone if not a full user
+      parentId: user.id,
+      respondentName,
+      respondentPhone,
       centerId: user.centerIds[0] || "",
       formType: "PPCS",
       formVersion: "1.0.0",
@@ -168,7 +179,7 @@ export function ParentForm({ user, childIdParam, onSuccess }: { user: User, chil
       const res = await fetch("/api/forms/parent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form)
+        body: JSON.stringify({ ...form, verificationNationalId })
       });
       if (!res.ok) throw new Error("Failed");
       
@@ -191,7 +202,7 @@ export function ParentForm({ user, childIdParam, onSuccess }: { user: User, chil
         </Link>
         <div>
           <h2 className="text-2xl font-bold text-gray-900">فرم دیدگاه والد (PPCS)</h2>
-          <p className="text-sm text-gray-500 mt-1">کودک: {childName}</p>
+          <p className="text-sm text-gray-500 mt-1">کودک: {childName} — پاسخ‌ها را با توجه به رفتار فرزندتان در شش ماه گذشته ثبت کنید.</p>
         </div>
       </div>
 
@@ -204,13 +215,21 @@ export function ParentForm({ user, childIdParam, onSuccess }: { user: User, chil
       <form onSubmit={handleSubmit} className="space-y-12">
         
         <div className="bg-white border rounded-xl p-6 shadow-sm">
-           <label className="block text-sm font-bold text-gray-900 mb-2">نسبت با کودک</label>
-           <select value={relationToChild} onChange={e => setRelationToChild(e.target.value as any)} className="w-full md:w-1/3 rounded-lg border-gray-300 p-2.5 border">
-             <option value="مادر">مادر</option>
-             <option value="پدر">پدر</option>
-             <option value="سرپرست قانونی">سرپرست قانونی</option>
-             <option value="سایر">سایر</option>
+           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+             <label className="block text-sm font-bold text-gray-900">نام و نام خانوادگی پاسخ‌دهنده
+               <input required value={respondentName} onChange={e => setRespondentName(e.target.value)} className="mt-2 w-full rounded-lg border border-gray-300 p-2.5" />
+             </label>
+             <label className="block text-sm font-bold text-gray-900">شماره تماس پاسخ‌دهنده (اختیاری)
+               <input dir="ltr" type="tel" value={respondentPhone} onChange={e => setRespondentPhone(e.target.value)} className="mt-2 w-full rounded-lg border border-gray-300 p-2.5" />
+             </label>
+           </div>
+           <label className="mt-5 block text-sm font-bold text-gray-900">نسبت با کودک</label>
+           <select value={relationToChild} onChange={e => setRelationToChild(e.target.value as any)} className="mt-2 w-full rounded-lg border border-gray-300 p-2.5 md:w-1/3">
+             <option value="مادر">مادر</option><option value="پدر">پدر</option><option value="سرپرست قانونی">سرپرست قانونی</option><option value="سایر">سایر</option>
            </select>
+           {/* Child identity and age are loaded from the linked child profile. */}
+           <p className="mt-4 text-sm text-gray-500">مشخصات کودک: {childName} — جنسیت: {childGender || "نامشخص"} — سن هنگام تکمیل: {childAge} — مرکز: {centerName || "ثبت نشده"}{centerRegion ? ` (${centerRegion})` : ""}</p>
+           <p className="mt-1 text-xs text-gray-500">تاریخ تکمیل فرم: {new Date().toLocaleDateString("fa-IR")}</p>
         </div>
 
         <div className="space-y-6">

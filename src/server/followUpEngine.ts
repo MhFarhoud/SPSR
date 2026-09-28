@@ -23,9 +23,9 @@ export function compareFollowUp(
     resultCategory = "بروز نشانه جدی";
   } else if (direction === "تشدید" || followUp.overallChange === "خیلی بدتر شده است." || followUp.overallChange === "کمی بدتر شده است.") {
     resultCategory = "تشدید";
-  } else if (followUp.effectiveness === "برای قضاوت زود است.") {
+  } else if (followUp.effectiveness === "برای قضاوت زود است." || followUp.effectiveness === "اطلاعی ندارم.") {
     resultCategory = "نتیجه نامشخص به‌دلیل کوتاه‌بودن مدت مداخله";
-  } else if (followUp.implementationLevel === "اجرا نشده‌اند." || followUp.implementationLevel === "به میزان کم اجرا شده‌اند.") {
+  } else if (followUp.effectiveness === "هنوز اقدامی انجام نشده است." || followUp.implementationLevel === "اجرا نشده‌اند." || followUp.implementationLevel === "به میزان کم اجرا شده‌اند." || followUp.implementationLevel === "هنوز راهکاری پیشنهاد نشده است." || followUp.implementationLevel === "اطلاعی ندارم.") {
     resultCategory = "نتیجه نامشخص به‌دلیل اجرا نشدن راهکار";
   } else if (direction === "بهبود" && (followUp.overallChange === "خیلی بهتر شده است.")) {
     resultCategory = "بهبود واضح";

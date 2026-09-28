@@ -113,7 +113,8 @@ export function PublicParentForm() {
         <div className="p-6">
           <ParentForm 
             user={dummyParentUser} 
-            childIdParam={childId}
+            childIdParam={child.id}
+            verificationNationalId={nationalId}
             onSuccess={() => setSubmitted(true)}
           />
         </div>

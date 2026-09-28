@@ -8,9 +8,24 @@ import { v4 as uuidv4 } from "uuid";
 
 export const assessmentsRouter = express.Router();
 
+function hasCompletePrimaryAnswers(answers: unknown): boolean {
+  if (!Array.isArray(answers) || answers.length !== 25) return false;
+  const questionIds = new Set<number>();
+  for (const answer of answers) {
+    const questionId = Number(answer?.questionId);
+    if (!Number.isInteger(questionId) || questionId < 1 || questionId > 25 || questionIds.has(questionId)) return false;
+    if (![0, 1, 2].includes(answer?.answerValue)) return false;
+    questionIds.add(questionId);
+  }
+  return questionIds.size === 25;
+}
+
 // Submit Teacher Assessment (TPCS)
 assessmentsRouter.post("/teacher", (req, res) => {
   const form = req.body;
+  if (!hasCompletePrimaryAnswers(form.answers)) {
+    return res.status(400).json({ success: false, message: "برای محاسبه نتیجه باید به هر ۲۵ گویه پاسخ معتبر داده شود." });
+  }
   form.score = calculateTPCS(form.answers);
 
   const idx = db.data.teacherAssessments.findIndex(a => a.id === form.id);
@@ -44,7 +59,18 @@ assessmentsRouter.post("/teacher", (req, res) => {
 
 // Submit Parent Assessment (PPCS)
 assessmentsRouter.post("/parent", (req, res) => {
-  const form = req.body;
+  const { verificationNationalId, ...form } = req.body || {};
+  if (!hasCompletePrimaryAnswers(form.answers)) {
+    return res.status(400).json({ success: false, message: "برای محاسبه نتیجه باید به هر ۲۵ گویه پاسخ معتبر داده شود." });
+  }
+  const linkedChild = db.data.children.find(child => child.id === form.childId);
+  if (!linkedChild) return res.status(404).json({ success: false, message: "پرونده کودک پیدا نشد." });
+  if (form.parentId === "parent" && (!verificationNationalId || linkedChild.nationalId !== verificationNationalId)) {
+    return res.status(401).json({ success: false, message: "برای ثبت فرم، از لینک اختصاصی والد و کد ملی کودک استفاده کنید." });
+  }
+  if (verificationNationalId && linkedChild.nationalId !== verificationNationalId) {
+    return res.status(401).json({ success: false, message: "کد ملی با پرونده کودک تطبیق ندارد." });
+  }
   form.score = calculatePPCS(form.answers);
   form.impactScore = calculateImpactScore(form.overallProblem, {
     q28: form.childDistressLevel || "خیر",
@@ -88,6 +114,13 @@ assessmentsRouter.post("/parent", (req, res) => {
 assessmentsRouter.post("/followup", (req, res) => {
   const followUp = req.body;
 
+  const validReasons = ["نمره مرزی یا نابهنجار در فرم مربی", "نمره مرزی یا نابهنجار در فرم والد", "اختلاف بین فرم والد و مربی", "نمره تأثیر بالا", "نگرانی ثبت‌شده مربی", "تصمیم سرمربی یا تیم تخصصی", "پیگیری پس از ارائه راهکار", "پیگیری پس از شروع خدمات تخصصی", "بروز نشانه جدید"];
+  if (!validReasons.includes(followUp.triggerReason)) return res.status(400).json({ success: false, message: "دلیل شروع فالوآپ را مشخص کنید." });
+  if (!followUp.childId || !db.data.children.some(child => child.id === followUp.childId)) return res.status(400).json({ success: false, message: "پرونده کودک معتبر نیست." });
+  if (!Array.isArray(followUp.targetBehaviors) || !followUp.targetBehaviors.some((behavior: unknown) => typeof behavior === "string" && behavior.trim())) return res.status(400).json({ success: false, message: "رفتار هدف را مشخص کنید." });
+  if (followUp.newBehaviorObserved && !String(followUp.newBehaviorDescription || "").trim()) return res.status(400).json({ success: false, message: "توضیح کوتاه رفتار جدید الزامی است." });
+  if (Array.isArray(followUp.newBehaviorKeywords) && followUp.newBehaviorKeywords.length > 3) return res.status(400).json({ success: false, message: "حداکثر سه واژه کلیدی برای رفتار جدید وارد کنید." });
+
   if (!Array.isArray(followUp.targetDomains) || followUp.targetDomains.length < 1 || followUp.targetDomains.length > 2) {
     return res.status(400).json({ success: false, message: "یک یا دو حوزه فالوآپ باید انتخاب شود." });
   }
@@ -117,14 +150,19 @@ assessmentsRouter.post("/followup", (req, res) => {
 
   // Calculate comparison if we have a previous assessment score
   if (followUp.previousAssessmentId) {
-    const prevTeacher = db.data.teacherAssessments.find(a => a.id === followUp.previousAssessmentId);
-    if (prevTeacher && prevTeacher.score) {
+    const previousAssessment = followUp.previousAssessmentType === "PPCS"
+      ? db.data.parentAssessments.find(a => a.id === followUp.previousAssessmentId)
+      : db.data.teacherAssessments.find(a => a.id === followUp.previousAssessmentId);
+    if (previousAssessment && previousAssessment.childId !== followUp.childId) {
+      return res.status(400).json({ success: false, message: "ارزیابی پایه متعلق به این پرونده کودک نیست." });
+    }
+    if (previousAssessment?.score) {
       for (const current of scoredDomains) {
         const domainKey = current.domain === "نشانگان هیجانی" ? "A"
           : current.domain === "مشکلات سلوک" ? "B"
           : current.domain === "بیش‌فعالی و کمبود توجه" ? "C"
           : current.domain === "مشکلات با همتایان" ? "D" : "E";
-        const previous = prevTeacher.score.subscales.find(s => s.domain === domainKey);
+        const previous = previousAssessment.score.subscales.find(s => s.domain === domainKey);
         if (!previous) continue;
         const comparison = compareFollowUp(previous.score, current.score, { ...followUp, targetDomains: [current.domain] });
         comparison.domain = current.domain;

@@ -171,6 +171,8 @@ export interface ParentAssessment {
   id: string;
   childId: string;
   parentId: string;
+  respondentName?: string;
+  respondentPhone?: string;
   centerId: string;
   formType: "PPCS";
   formVersion: string;
@@ -357,6 +359,7 @@ export interface FollowUp {
   
   triggerReason: "نمره مرزی یا نابهنجار در فرم مربی" | "نمره مرزی یا نابهنجار در فرم والد" | "اختلاف بین فرم والد و مربی" | "نمره تأثیر بالا" | "نگرانی ثبت‌شده مربی" | "تصمیم سرمربی یا تیم تخصصی" | "پیگیری پس از ارائه راهکار" | "پیگیری پس از شروع خدمات تخصصی" | "بروز نشانه جدید";
   previousAssessmentId?: string;
+  previousAssessmentType?: "TPCS" | "PPCS";
   
   targetDomains: ("نشانگان هیجانی" | "مشکلات سلوک" | "بیش‌فعالی و کمبود توجه" | "مشکلات با همتایان" | "رفتارهای جامعه‌پسند" | "مشاهده تکمیلی خارج از گویه‌های اصلی")[];
   targetBehaviors: string[];
@@ -369,7 +372,7 @@ export interface FollowUp {
   centerActionsDone?: string[];
   specialistServicesDone?: { service: string; status: "در حال انجام" | "انجام شده و پایان یافته" | "قطع شده" | "هنوز شروع نشده" | "وضعیت نامشخص" }[];
   
-  implementationLevel: "اجرا نشده‌اند." | "به میزان کم اجرا شده‌اند." | "تا حدی اجرا شده‌اند." | "به‌طور کامل اجرا شده‌اند." | "هنوز راهکاری پیشنهاد نشده است." | "اطلاعی ندارم.";
+  implementationLevel: "اجرا نشده‌اند." | "به میزان کم اجرا شده‌اند." | "تا حدی اجرا شده‌اند." | "به طور کامل اجرا شده‌اند." | "هنوز راهکاری پیشنهاد نشده است." | "اطلاعی ندارم.";
   nonImplementationReason?: "شرایط کلاس و مرکز فراهم نبود." | "امکان همکاری خانواده فراهم نبود." | "توقف حضور نوآموز در مرکز رخ داد.";
   
   effectiveness: "خیر" | "کمی" | "زیاد" | "خیلی زیاد" | "هنوز اقدامی انجام نشده است." | "برای قضاوت زود است." | "اطلاعی ندارم.";

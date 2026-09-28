@@ -61,8 +61,10 @@ export function TeacherForm({ user }: { user: User }) {
   
   const [childName, setChildName] = useState("");
   const [childAge, setChildAge] = useState("");
+  const [childContext, setChildContext] = useState("");
 
   const [answers, setAnswers] = useState<Record<number, number>>({});
+  const [familiarityDuration, setFamiliarityDuration] = useState<TeacherAssessment["familiarityDuration"] | "">("");
   
   const [overallProblem, setOverallProblem] = useState<TeacherAssessment["overallProblem"]>("خیر");
   const [problemAreas, setProblemAreas] = useState<Record<string, "کمی" | "قطعا" | "خیلی">>({});
@@ -83,6 +85,9 @@ export function TeacherForm({ user }: { user: User }) {
       const c = data.children.find(ch => ch.id === id);
       if (c) {
         setChildName(`${c.firstName} ${c.lastName}`);
+        const center = data.centers.find(item => item.id === c.currentCenterId);
+        const childClass = data.classes?.find(item => item.id === c.currentClassId);
+        setChildContext([c.gender, c.currentStage, center?.name, center?.region, childClass?.name].filter(Boolean).join(" — "));
         const age = calculateExactAge(c.birthDate);
         setChildAge(age ? age.formatted : "نامشخص");
       }
@@ -94,6 +99,11 @@ export function TeacherForm({ user }: { user: User }) {
     
     if (Object.keys(answers).length < 25) {
       setError(`لطفاً به همه ۲۵ سوال اصلی پاسخ دهید.`);
+      window.scrollTo(0, 0);
+      return;
+    }
+    if (!familiarityDuration) {
+      setError("لطفاً مدت آشنایی خود با کودک را مشخص کنید.");
       window.scrollTo(0, 0);
       return;
     }
@@ -123,7 +133,7 @@ export function TeacherForm({ user }: { user: User }) {
       formVersion: "1.0.0",
       status: "SUBMITTED",
       childAgeAtAssessment: childAge,
-      familiarityDuration: "بیش از ۳ ماه", // Should be a state, hardcoded for UI brevity
+      familiarityDuration: familiarityDuration as TeacherAssessment["familiarityDuration"],
       answers: formAnswers,
       overallProblem,
       problemAreas: formattedProblemAreas,
@@ -159,7 +169,8 @@ export function TeacherForm({ user }: { user: User }) {
         </Link>
         <div>
           <h2 className="text-2xl font-bold text-gray-900">فرم دیدگاه مربی (TPCS)</h2>
-          <p className="text-sm text-gray-500 mt-1">کودک: {childName}</p>
+          <p className="text-sm text-gray-500 mt-1">کودک: {childName} — {childContext} — سن: {childAge}</p>
+          <p className="text-xs text-gray-500 mt-1">مربی: {user.fullName} — تاریخ تکمیل: {new Date().toLocaleDateString("fa-IR")} — بر اساس مشاهدات سه ماه گذشته پاسخ دهید.</p>
         </div>
       </div>
 
@@ -170,6 +181,12 @@ export function TeacherForm({ user }: { user: User }) {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-12">
+        <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-5">
+          <label className="block text-sm font-medium text-gray-900">چه مدتی است کودک را در محیط آموزشی می‌شناسید؟</label>
+          <select required value={familiarityDuration} onChange={e => setFamiliarityDuration(e.target.value as TeacherAssessment["familiarityDuration"] | "")} className="mt-2 w-full rounded-lg border border-gray-300 bg-white p-3 md:w-1/2">
+            <option value="">انتخاب مدت آشنایی</option><option value="کمتر از یک ماه">کمتر از یک ماه</option><option value="۱ تا ۳ ماه">۱ تا ۳ ماه</option><option value="بیش از ۳ ماه">بیش از ۳ ماه</option>
+          </select>
+        </div>
         <div className="space-y-6">
           <h3 className="text-xl font-bold text-indigo-900 border-b border-indigo-100 pb-2">۱. بخش سوالات اصلی</h3>
           <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden divide-y divide-gray-100">
