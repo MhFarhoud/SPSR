@@ -298,7 +298,7 @@ export function ChildProfile({ user }: { user?: User }) {
                           {form.status === "SUBMITTED" ? "تکمیل نهایی" : "پیش‌نویس"}
                         </Badge>
                       </div>
-                      {form.score && user?.role !== "مربی" && (
+                      {form.score && (
                         <AssessmentScoreSummary score={form.score} />
                       )}
                     </div>
