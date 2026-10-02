@@ -66,7 +66,7 @@ export function Dashboard({ user }: { user: User }) {
               <tr>
                 <th scope="col" className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">نام کودک</th>
                 <th scope="col" className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">سن / مقطع</th>
-                <th scope="col" className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">وضعیت ارزیابی</th>
+                {user.role !== "مربی" && <th scope="col" className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">وضعیت ارزیابی</th>}
                 <th scope="col" className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">عملیات</th>
               </tr>
             </thead>
@@ -90,7 +90,7 @@ export function Dashboard({ user }: { user: User }) {
                     <div className="text-sm text-gray-900">{child.currentStage}</div>
                     <div className="text-xs text-gray-500">متولد {child.birthDate}</div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  {user.role !== "مربی" && <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex flex-col gap-1">
                       <span className={`px-2.5 py-1 inline-flex text-xs leading-5 font-semibold rounded-full w-max ${getLevelColor(status.level)}`}>
                         {status.level}
@@ -98,7 +98,7 @@ export function Dashboard({ user }: { user: User }) {
                       <span className="text-xs text-gray-500">{status.text}</span>
                       <span className="text-xs text-gray-500">وضعیت پرونده: {child.caseStatus?.replace(/_/g, " ") || "نامشخص"}</span>
                     </div>
-                  </td>
+                  </td>}
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3 space-x-reverse">
                     <Link to={`/child/${child.id}`} className="text-indigo-600 hover:text-indigo-900 inline-flex items-center gap-1">
                       مشاهده پرونده
@@ -108,7 +108,7 @@ export function Dashboard({ user }: { user: User }) {
               )})}
               {visibleChildren.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={user.role === "مربی" ? 3 : 4} className="px-6 py-12 text-center text-gray-500">
                     <AlertCircle className="w-8 h-8 mx-auto text-gray-400 mb-3" />
                     هیچ کودکی یافت نشد.
                   </td>

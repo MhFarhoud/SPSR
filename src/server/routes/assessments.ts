@@ -25,47 +25,103 @@ function hasCompletePrimaryAnswers(answers: unknown): boolean {
 assessmentsRouter.post("/teacher", (req, res) => {
   const submitter = getSessionUser(req);
   if (!submitter) return res.status(401).json({ success: false, message: "برای ثبت فرم وارد سامانه شوید." });
-  const form = req.body;
+  const form = req.body || {};
+  const existingIndex = db.data.teacherAssessments.findIndex(assessment => assessment.id === form.id);
+  const existingForm = existingIndex >= 0 ? db.data.teacherAssessments[existingIndex] : undefined;
+  const canManageForms = ["ادمین", "تیم_تخصصی", "سرمربی"].includes(submitter.role);
+  if (submitter.role !== "مربی" && !canManageForms) {
+    return res.status(403).json({ success: false, message: "این نقش اجازه ثبت یا ویرایش فرم مربی را ندارد." });
+  }
   if (submitter.role === "مربی" && form.teacherId !== submitter.id) {
     return res.status(403).json({ success: false, message: "مربی فقط می‌تواند فرم را با حساب خودش ثبت کند." });
   }
+  if (existingForm && submitter.role === "مربی" && existingForm.teacherId !== submitter.id) {
+    return res.status(403).json({ success: false, message: "فقط مربی ثبت‌کننده می‌تواند فرم را ویرایش کند." });
+  }
   if (submitter.role === "مربی") {
-    const childIsAssigned = db.data.children.some(child => child.id === form.childId && db.data.classes?.some(group => group.id === child.currentClassId && group.teacherId === submitter.id));
+    const childId = existingForm?.childId || form.childId;
+    const childIsAssigned = db.data.children.some(child => child.id === childId && db.data.classes?.some(group => group.id === child.currentClassId && group.teacherId === submitter.id));
     if (!childIsAssigned) return res.status(403).json({ success: false, message: "این کودک به کلاس‌های شما اختصاص داده نشده است." });
   }
   if (!hasCompletePrimaryAnswers(form.answers)) {
     return res.status(400).json({ success: false, message: "برای محاسبه نتیجه باید به هر ۲۵ گویه پاسخ معتبر داده شود." });
   }
-  form.score = calculateTPCS(form.answers);
+  const now = new Date().toISOString();
+  const savedForm = {
+    ...existingForm,
+    ...form,
+    id: existingForm?.id || form.id || uuidv4(),
+    childId: existingForm?.childId || form.childId,
+    teacherId: existingForm?.teacherId || form.teacherId,
+    centerId: existingForm?.centerId || form.centerId,
+    createdAt: existingForm?.createdAt || form.createdAt || now,
+    updatedAt: now,
+    submittedAt: now,
+    status: "SUBMITTED" as const,
+    score: calculateTPCS(form.answers)
+  };
+  if (existingForm) db.data.teacherAssessments[existingIndex] = savedForm;
+  else db.data.teacherAssessments.push(savedForm);
 
-  const idx = db.data.teacherAssessments.findIndex(a => a.id === form.id);
-  if (idx >= 0) db.data.teacherAssessments[idx] = form;
-  else db.data.teacherAssessments.push(form);
-  
   // Audit log
   db.data.auditLogs.push({
     id: uuidv4(),
     entityType: "Assessment",
-    entityId: form.id,
-    action: "SUBMIT",
-    userId: form.teacherId,
-    timestamp: new Date().toISOString(),
-    details: `Teacher assessment submitted for child ${form.childId}`
+    entityId: savedForm.id,
+    action: existingForm ? "UPDATE" : "SUBMIT",
+    userId: submitter.id,
+    timestamp: now,
+    details: existingForm ? `فرم دیدگاه مربی ویرایش شد (کودک ${savedForm.childId})` : `فرم دیدگاه مربی ثبت شد (کودک ${savedForm.childId})`
   });
 
-  // Attempt alignment if parent form exists
-  const pAssessments = db.data.parentAssessments.filter(a => a.childId === form.childId);
-  if (pAssessments.length > 0) {
-    const parentForm = pAssessments.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-    if (parentForm.score) {
-      const alignment = compareAssessments(parentForm, form);
-      db.data.alignments.push(alignment);
-    }
+  // Editing a form invalidates alignments that were calculated from its old answers.
+  if (existingForm) {
+    db.data.alignments = db.data.alignments.filter(alignment => alignment.teacherAssessmentId !== savedForm.id);
+  }
+
+  // Recompute against the latest parent form so the case status follows the edited answers.
+  const parentForm = db.data.parentAssessments
+    .filter(assessment => assessment.childId === savedForm.childId && assessment.score)
+    .sort((a, b) => new Date(b.submittedAt || b.updatedAt || b.createdAt).getTime() - new Date(a.submittedAt || a.updatedAt || a.createdAt).getTime())[0];
+  if (parentForm?.score) {
+    db.data.alignments.push(compareAssessments(parentForm, savedForm));
   }
 
   db.persist();
-  if (submitter?.role === "مربی") return res.json({ success: true });
-  res.json({ success: true, score: form.score });
+  if (submitter.role === "مربی") return res.json({ success: true });
+  res.json({ success: true, score: savedForm.score });
+});
+
+assessmentsRouter.delete("/teacher/:id", (req, res) => {
+  const submitter = getSessionUser(req);
+  if (!submitter) return res.status(401).json({ success: false, message: "برای حذف فرم وارد سامانه شوید." });
+  const index = db.data.teacherAssessments.findIndex(assessment => assessment.id === req.params.id);
+  if (index < 0) return res.status(404).json({ success: false, message: "فرم مربی پیدا نشد." });
+  const form = db.data.teacherAssessments[index];
+  const canManageForms = ["ادمین", "تیم_تخصصی", "سرمربی"].includes(submitter.role);
+  if (submitter.role === "مربی") {
+    if (form.teacherId !== submitter.id) return res.status(403).json({ success: false, message: "فقط مربی ثبت‌کننده می‌تواند فرم را حذف کند." });
+    const assigned = db.data.children.some(child => child.id === form.childId && db.data.classes?.some(group => group.id === child.currentClassId && group.teacherId === submitter.id));
+    if (!assigned) return res.status(403).json({ success: false, message: "این کودک دیگر به کلاس‌های شما اختصاص داده نشده است." });
+  } else if (!canManageForms) {
+    return res.status(403).json({ success: false, message: "این نقش اجازه حذف فرم مربی را ندارد." });
+  }
+
+  db.data.teacherAssessments.splice(index, 1);
+  db.data.alignments = db.data.alignments.filter(alignment => alignment.teacherAssessmentId !== form.id);
+  db.data.followUps.forEach(followUp => {
+    if (followUp.previousAssessmentId === form.id) {
+      followUp.previousAssessmentId = undefined;
+      followUp.previousAssessmentType = undefined;
+    }
+  });
+  db.data.auditLogs.push({
+    id: uuidv4(), entityType: "Assessment", entityId: form.id, action: "DELETE",
+    userId: submitter.id, timestamp: new Date().toISOString(),
+    details: `فرم دیدگاه مربی حذف شد (کودک ${form.childId})`
+  });
+  db.persist();
+  res.json({ success: true });
 });
 
 // Submit Parent Assessment (PPCS)

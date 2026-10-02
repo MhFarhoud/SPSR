@@ -184,7 +184,12 @@ apiRouter.get("/data", (req, res) => {
     classes: coachClasses,
     children: coachSafeChildren,
     ...(isCoach ? {
-      teacherAssessments: [],
+      teacherAssessments: data.teacherAssessments
+        .filter(assessment => assessment.teacherId === viewer.id && visibleChildIds.has(assessment.childId))
+        .map(assessment => {
+          const { score, ...ownFormWithoutResult } = assessment;
+          return ownFormWithoutResult;
+        }),
       parentAssessments: [],
       alignments: [],
       followUps: [],

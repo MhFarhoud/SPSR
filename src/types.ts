@@ -156,7 +156,7 @@ export interface TeacherAssessment {
   burdenOnTeacherOrClass?: "خیر" | "کمی" | "زیاد" | "خیلی زیاد";
 
   // Scenario-based
-  scenarios: { domain: string; scenarioId: string; selectedOption: string }[];
+  scenarios: { domain: string; scenarioId: string; scenarioText?: string; selectedOption: string }[];
   
   freeTextNotes?: string; // Max 150-200 chars
   

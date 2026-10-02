@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, Link, useSearchParams } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 import { User, TeacherAssessment, AssessmentAnswer } from "../types";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
@@ -58,6 +58,8 @@ const SCENARIOS: Record<string, { id: string; text: string; options: string[] }[
 export function TeacherForm({ user }: { user: User }) {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const editId = searchParams.get("edit");
   
   const [childName, setChildName] = useState("");
   const [childAge, setChildAge] = useState("");
@@ -79,6 +81,7 @@ export function TeacherForm({ user }: { user: User }) {
   
   const [freeTextNotes, setFreeTextNotes] = useState("");
   const [error, setError] = useState("");
+  const [editingAssessment, setEditingAssessment] = useState<TeacherAssessment | null>(null);
 
   useEffect(() => {
     fetchData().then(data => {
@@ -91,11 +94,32 @@ export function TeacherForm({ user }: { user: User }) {
         const age = calculateExactAge(c.birthDate);
         setChildAge(age ? age.formatted : "نامشخص");
       }
-    });
-  }, [id]);
+      if (editId) {
+        const assessment = data.teacherAssessments?.find(form => form.id === editId && form.childId === id);
+        const canManageForms = ["ادمین", "تیم_تخصصی", "سرمربی"].includes(user.role);
+        if (!assessment || (user.role === "مربی" && assessment.teacherId !== user.id) || (user.role !== "مربی" && !canManageForms)) {
+          setError("این فرم پیدا نشد یا شما اجازهٔ ویرایش آن را ندارید.");
+          return;
+        }
+        setEditingAssessment(assessment);
+        setAnswers(Object.fromEntries((assessment.answers || []).map(answer => [Number(answer.questionId), Number(answer.answerValue)])));
+        setFamiliarityDuration(assessment.familiarityDuration);
+        setOverallProblem(assessment.overallProblem);
+        setProblemAreas(Object.fromEntries((assessment.problemAreas || []).map(area => [area.domain, area.severity])));
+        setDurationOfProblem(assessment.durationOfProblem || "کمتر از یک ماه");
+        setChildDistressLevel(assessment.childDistressLevel || "خیر");
+        setImpactOnPeerRelations(assessment.impactOnPeerRelations || "خیر");
+        setImpactOnLearning(assessment.impactOnLearning || "خیر");
+        setBurdenOnTeacherOrClass(assessment.burdenOnTeacherOrClass || "خیر");
+        setScenarioAnswers(Object.fromEntries((assessment.scenarios || []).map(scenario => [scenario.scenarioId, scenario.selectedOption])));
+        setFreeTextNotes(assessment.freeTextNotes || "");
+      }
+    }).catch(() => setError("بارگذاری فرم ناموفق بود. دوباره تلاش کنید."));
+  }, [id, editId, user.id, user.role]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (editId && !editingAssessment) return;
     
     if (Object.keys(answers).length < 25) {
       setError(`لطفاً به همه ۲۵ سوال اصلی پاسخ دهید.`);
@@ -121,14 +145,14 @@ export function TeacherForm({ user }: { user: User }) {
       if (sId.startsWith("s_bh")) domain = "رفتار";
       if (sId.startsWith("s_at")) domain = "تمرکز و توجه";
       if (sId.startsWith("s_pr")) domain = "تعامل با دیگران";
-      return { domain, scenarioId: sId, selectedOption: opt as string };
+      return { domain, scenarioId: sId, scenarioText: SCENARIOS[domain]?.find(scenario => scenario.id === sId)?.text, selectedOption: opt as string };
     });
 
     const form: TeacherAssessment = {
-      id: uuidv4(),
+      id: editingAssessment?.id || uuidv4(),
       childId: id!,
-      teacherId: user.id,
-      centerId: user.centerIds[0] || "",
+      teacherId: editingAssessment?.teacherId || user.id,
+      centerId: editingAssessment?.centerId || user.centerIds[0] || "",
       formType: "TPCS",
       formVersion: "1.0.0",
       status: "SUBMITTED",
@@ -144,8 +168,9 @@ export function TeacherForm({ user }: { user: User }) {
       burdenOnTeacherOrClass,
       scenarios: formattedScenarios,
       freeTextNotes,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      createdAt: editingAssessment?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      submittedAt: new Date().toISOString()
     };
 
     try {
@@ -154,12 +179,17 @@ export function TeacherForm({ user }: { user: User }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form)
       });
-      if (!res.ok) throw new Error("Failed");
+      const result = await res.json();
+      if (!res.ok || !result.success) throw new Error(result.message || "ثبت فرم ناموفق بود.");
       navigate(`/child/${id}`);
     } catch (err) {
-      setError("خطا در ثبت فرم");
+      setError(err instanceof Error ? err.message : "ثبت فرم ناموفق بود.");
     }
   };
+
+  if (editId && !editingAssessment) {
+    return <div className="mx-auto max-w-3xl p-8 text-center text-gray-600">{error || "در حال بارگذاری فرم برای ویرایش..."}<div><Link className="mt-4 inline-flex text-indigo-600 hover:underline" to={`/child/${id}`}>بازگشت به پرونده کودک</Link></div></div>;
+  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-20">
@@ -168,7 +198,7 @@ export function TeacherForm({ user }: { user: User }) {
           <ArrowRight className="w-5 h-5" />
         </Link>
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">فرم دیدگاه مربی (TPCS)</h2>
+          <h2 className="text-2xl font-bold text-gray-900">{editingAssessment ? "ویرایش فرم دیدگاه مربی (TPCS)" : "فرم دیدگاه مربی (TPCS)"}</h2>
           <p className="text-sm text-gray-500 mt-1">کودک: {childName} — {childContext} — سن: {childAge}</p>
           <p className="text-xs text-gray-500 mt-1">مربی: {user.fullName} — تاریخ تکمیل: {new Date().toLocaleDateString("fa-IR")} — بر اساس مشاهدات سه ماه گذشته پاسخ دهید.</p>
         </div>
@@ -332,10 +362,17 @@ export function TeacherForm({ user }: { user: User }) {
           </div>
         )}
 
+        <div className="space-y-3 rounded-xl border border-blue-100 bg-blue-50/60 p-5">
+          <label htmlFor="teacher-observations" className="block text-sm font-bold text-indigo-900">یادداشت مشاهدات مربی</label>
+          <p className="text-xs text-gray-600">اگر نکتهٔ مشخصی از رفتار کودک در کلاس مشاهده کرده‌اید، کوتاه و بدون درج اطلاعات حساس بنویسید.</p>
+          <textarea id="teacher-observations" value={freeTextNotes} onChange={event => setFreeTextNotes(event.target.value.slice(0, 200))} rows={4} maxLength={200} className="w-full rounded-lg border border-gray-300 bg-white p-3 text-sm" placeholder="مشاهدات تکمیلی مربی..." />
+          <p className="text-left text-xs text-gray-500">{freeTextNotes.length} از ۲۰۰ نویسه</p>
+        </div>
+
         <div className="flex justify-end pt-6">
           <button type="submit" className="flex items-center gap-2 py-3 px-8 rounded-xl shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">
             <CheckCircle2 className="w-5 h-5" />
-            ثبت نهایی فرم
+            {editingAssessment ? "ذخیره ویرایش فرم" : "ثبت نهایی فرم"}
           </button>
         </div>
       </form>

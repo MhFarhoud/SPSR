@@ -5,7 +5,7 @@ import { Tabs, Tab } from "../components/ui/Tabs";
 import { Badge } from "../components/ui/Badge";
 import { AssessmentScoreSummary } from "../components/AssessmentScoreSummary";
 import { Child, User, TeacherAssessment, ParentAssessment, AlignmentResult, FollowUp, Center, ClassGroup, ActionItem } from "../types";
-import { User as UserIcon, Activity, FileText, CheckSquare, Target, Settings, Plus, ListTodo, AlertTriangle, Pencil, X } from "lucide-react";
+import { User as UserIcon, Activity, FileText, CheckSquare, Target, Settings, Plus, ListTodo, AlertTriangle, Pencil, X, Trash2 } from "lucide-react";
 import { calculateExactAge } from "../utils/ageCalculator";
 
 export function ChildProfile({ user }: { user?: User }) {
@@ -67,6 +67,7 @@ export function ChildProfile({ user }: { user?: User }) {
 
   const exactAge = calculateExactAge(child.birthDate);
   const canManageChild = ["ادمین", "تیم_تخصصی", "سرمربی"].includes(user?.role || "");
+  const canManageTeacherForms = ["ادمین", "تیم_تخصصی", "سرمربی"].includes(user?.role || "");
   const editableCenters = centers.filter(center => user?.role !== "سرمربی" || user.centerIds.includes(center.id));
   const editableClasses = classes.filter(group => group.centerId === editForm.centerId && (user?.role !== "سرمربی" || group.supervisorId === user.id));
   const openEdit = () => {
@@ -105,9 +106,24 @@ export function ChildProfile({ user }: { user?: User }) {
   if (user?.role === "والد") {
     tabs = [{ id: "overview", label: "اطلاعات پایه", icon: UserIcon }];
   } else if (user?.role === "مربی") {
-    // Coach can open the child profile to complete the teacher form only.
-    tabs = [{ id: "overview", label: "اطلاعات پایه", icon: UserIcon }];
+    // Coaches can view and manage their own form without seeing assessment results.
+    tabs = [
+      { id: "overview", label: "اطلاعات پایه", icon: UserIcon },
+      { id: "assessments", label: "فرم‌های من", icon: FileText }
+    ];
   }
+
+  const deleteTeacherForm = async (form: TeacherAssessment) => {
+    if (!window.confirm(`فرم مربی ثبت‌شده در ${new Date(form.createdAt).toLocaleDateString("fa-IR")} حذف شود؟ نتیجهٔ همسویی متصل به این فرم نیز حذف خواهد شد.`)) return;
+    const response = await fetch(`/api/assessments/teacher/${encodeURIComponent(form.id)}`, { method: "DELETE" });
+    const result = await response.json();
+    if (!response.ok || !result.success) {
+      window.alert(result.message || "حذف فرم انجام نشد.");
+      return;
+    }
+    const data = await fetchData();
+    setTeacherForms(data.teacherAssessments?.filter(item => item.childId === id) || []);
+  };
 
   const getStatusBadge = (status?: string) => {
     switch(status) {
@@ -283,14 +299,16 @@ export function ChildProfile({ user }: { user?: User }) {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="space-y-4">
                 <h4 className="font-medium text-gray-700 flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-blue-500"></div> فرم‌های مربی
+                  <div className="w-2 h-2 rounded-full bg-blue-500"></div> {user?.role === "مربی" ? "فرم‌های من" : "فرم‌های مربی"}
                 </h4>
                 {teacherForms.length === 0 ? (
                   <div className="bg-gray-50 border border-dashed border-gray-300 rounded-lg p-6 text-center text-gray-500 text-sm">
                     فرم مربی برای این کودک ثبت نشده است.
                   </div>
                 ) : (
-                  teacherForms.map(form => (
+                  teacherForms.map(form => {
+                    const canEditForm = user?.role === "مربی" ? form.teacherId === user.id : canManageTeacherForms;
+                    return (
                     <div key={form.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
                       <div className="flex justify-between items-start mb-3">
                         <div>
@@ -301,11 +319,25 @@ export function ChildProfile({ user }: { user?: User }) {
                           {form.status === "SUBMITTED" ? "تکمیل نهایی" : "پیش‌نویس"}
                         </Badge>
                       </div>
-                      {form.score && (
+                      {user?.role !== "مربی" && form.score && (
                         <AssessmentScoreSummary score={form.score} />
                       )}
+                      {(form.freeTextNotes || form.problemAreas?.length || form.scenarios?.length) ? (
+                        <details className="mt-3 rounded-lg border border-blue-100 bg-blue-50/60 p-3">
+                          <summary className="cursor-pointer text-sm font-medium text-blue-900">مشاهدات مربی</summary>
+                          <div className="mt-3 space-y-3 text-sm text-gray-700">
+                            {!!form.problemAreas?.length && <p><span className="font-medium">حوزه‌ها و شدت مشاهده‌شده: </span>{form.problemAreas.map(area => `${area.domain} (${area.severity})`).join("، ")}</p>}
+                            {!!form.scenarios?.length && <div className="space-y-2"><p className="font-medium">پاسخ به سناریوهای مشاهده:</p>{form.scenarios.map(scenario => <div key={scenario.scenarioId}><p>{scenario.domain}{scenario.scenarioText ? ` — ${scenario.scenarioText}` : ""}</p><p className="mr-3 text-gray-600">پاسخ مربی: {scenario.selectedOption}</p></div>)}</div>}
+                            {!!form.freeTextNotes?.trim() && <p className="whitespace-pre-wrap"><span className="font-medium">یادداشت مربی: </span>{form.freeTextNotes}</p>}
+                          </div>
+                        </details>
+                      ) : <p className="mt-3 text-sm text-gray-500">مشاهدهٔ تکمیلی یا یادداشتی ثبت نشده است.</p>}
+                      {canEditForm && <div className="mt-3 flex justify-end gap-2 border-t pt-3">
+                        <button type="button" onClick={() => navigate(`/child/${child.id}/form?edit=${encodeURIComponent(form.id)}`)} className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 px-3 py-1.5 text-sm text-indigo-700 hover:bg-indigo-50"><Pencil className="h-4 w-4" /> ویرایش فرم</button>
+                        <button type="button" onClick={() => void deleteTeacherForm(form)} className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"><Trash2 className="h-4 w-4" /> حذف فرم</button>
+                      </div>}
                     </div>
-                  ))
+                  );})
                 )}
               </div>
 

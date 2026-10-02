@@ -1,7 +1,9 @@
 import type { AlignmentResult, AssessmentScore, CaseStatus, Child } from "../../types";
 
 export type ScoredAssessment = {
+  id: string;
   childId: string;
+  formType: "TPCS" | "PPCS";
   score?: AssessmentScore;
   createdAt: string;
   updatedAt?: string;
@@ -17,11 +19,18 @@ export function getEffectiveCaseStatus(
   alignments: AlignmentResult[] = [],
   assessments: ScoredAssessment[] = []
 ): CaseStatus | undefined {
-  const latest = alignments
-    .filter(alignment => alignment.childId === child.id)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-
   const childAssessments = assessments.filter(assessment => assessment.childId === child.id && assessment.score);
+  const latestAssessmentsByType = ["TPCS", "PPCS"].map(formType => childAssessments
+    .filter(assessment => assessment.formType === formType)
+    .sort((a, b) => timestamp(b.submittedAt || b.updatedAt || b.createdAt) - timestamp(a.submittedAt || a.updatedAt || a.createdAt))[0])
+    .filter((assessment): assessment is ScoredAssessment => Boolean(assessment));
+  const latestTeacherAssessment = latestAssessmentsByType.find(assessment => assessment.formType === "TPCS");
+  const latestParentAssessment = latestAssessmentsByType.find(assessment => assessment.formType === "PPCS");
+  const latest = latestTeacherAssessment && latestParentAssessment
+    ? alignments
+      .filter(alignment => alignment.childId === child.id && alignment.teacherAssessmentId === latestTeacherAssessment.id && alignment.parentAssessmentId === latestParentAssessment.id)
+      .sort((a, b) => timestamp(b.createdAt) - timestamp(a.createdAt))[0]
+    : undefined;
   const latestAssessmentAt = Math.max(0, ...childAssessments.map(assessment => timestamp(assessment.submittedAt || assessment.updatedAt || assessment.createdAt)));
   const latestAlignmentAt = timestamp(latest?.createdAt);
   const latestEvaluationAt = Math.max(latestAssessmentAt, latestAlignmentAt);
@@ -47,8 +56,8 @@ export function getEffectiveCaseStatus(
   }
 
   // A single completed form must affect the case list even while the other form is pending.
-  if (childAssessments.length > 0) {
-    const levels = childAssessments.map(assessment => assessment.score!.totalLevel);
+  if (latestAssessmentsByType.length > 0) {
+    const levels = latestAssessmentsByType.map(assessment => assessment.score!.totalLevel);
     if (levels.includes("نابهنجار")) return "بررسی_تخصصی";
     if (levels.includes("مرزی")) return "نیازمند_بررسی";
     if (levels.every(level => level === "بهنجار")) return "عادی";
