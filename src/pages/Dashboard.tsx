@@ -35,7 +35,9 @@ export function Dashboard({ user }: { user: User }) {
     const alignment = data.alignments.filter(a => a.childId === childId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
     if (alignment) return { text: alignment.suggestedPath, level: alignment.overallTeacherLevel }; // Rough proxy
     
-    const tAssess = data.teacherAssessments.find(t => t.childId === childId);
+    const tAssess = data.teacherAssessments
+      .filter(t => t.childId === childId)
+      .sort((a, b) => new Date(b.submittedAt || b.updatedAt || b.createdAt).getTime() - new Date(a.submittedAt || a.updatedAt || a.createdAt).getTime())[0];
     if (tAssess) return { text: "در انتظار فرم والد", level: tAssess.score?.totalLevel };
     
     return { text: "ارزیابی نشده", level: "نامشخص" };

@@ -170,7 +170,8 @@ apiRouter.get("/data", (req, res) => {
   const coachClasses = isCoach ? data.classes.filter(group => group.teacherId === viewer.id) : data.classes;
   const coachClassIds = new Set(coachClasses.map(group => group.id));
   const coachChildren = isCoach ? data.children.filter(child => child.currentClassId && coachClassIds.has(child.currentClassId)) : data.children;
-  const children = coachChildren.map(child => withEffectiveCaseStatus(child, data.alignments));
+  const assessments = [...data.teacherAssessments, ...data.parentAssessments];
+  const children = coachChildren.map(child => withEffectiveCaseStatus(child, data.alignments, assessments));
   const coachSafeChildren = isCoach ? children.map(child => {
     const { caseStatus, priority, statusChangeReason, statusChangeDate, ...safeChild } = child;
     return safeChild;
