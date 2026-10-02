@@ -17,6 +17,18 @@
 npm install
 ```
 
+### نقشهٔ کد با Graphify
+برای اینکه پیش از تغییرات، ارتباط بخش‌های پروژه بررسی شود، Graphify را نصب و نقشهٔ محلی کد را بسازید:
+```bash
+uv tool install graphifyy
+graphify extract . --code-only
+```
+بعد از تغییر کد، نقشه را به‌روز کنید:
+```bash
+graphify update .
+```
+خروجی نقشه در `graphify-out/` ساخته می‌شود و در Git ثبت نمی‌شود؛ بنابراین هر محیط آن را محلی و از روی کد خودش تولید می‌کند. راهنمای Codex پروژه در `AGENTS.md` و skill در `.codex/skills/graphify/` قرار دارد.
+
 اجرای نسخه توسعه (Development):
 ```bash
 npm run dev

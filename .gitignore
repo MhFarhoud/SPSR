@@ -9,3 +9,4 @@ coverage/
 backups/
 data.json*
 seed.cjs
+graphify-out/
