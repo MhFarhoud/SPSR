@@ -49,7 +49,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     label: "پرونده‌ها", icon: Briefcase, path: "/cases",
-    hiddenFor: ["درمانگر"],
+    hiddenFor: ["درمانگر", "مربی"],
     subItems: [
       { label: "پرونده‌های فعال", path: "/cases/active" },
       { label: "نیازمند بررسی", path: "/cases/review" },
@@ -81,7 +81,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     label: "گزارش‌ها", icon: BarChart, path: "/reports",
-    hiddenFor: ["درمانگر"],
+    hiddenFor: ["درمانگر", "مربی"],
     subItems: [
       { label: "کودکان", path: "/reports/children" },
       { label: "ارزیابی‌ها", path: "/reports/assessments" },
@@ -180,7 +180,7 @@ export function Layout({ children, user, onLogout }: { children: React.ReactNode
               return true;
             }).map((item) => {
               const visibleItem = user.role === "مربی" && item.path === "/assessments"
-                ? { ...item, subItems: item.subItems?.filter(sub => sub.path !== "/assessments/parent") }
+                ? { ...item, label: "تکمیل فرم ارزیابی", path: "/assessments/teacher", subItems: undefined }
                 : item;
               return (
                 <NavLink 

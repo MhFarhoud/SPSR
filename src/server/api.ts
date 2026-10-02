@@ -8,6 +8,7 @@ import { childrenRouter } from "./routes/children";
 import { dashboardRouter } from "./routes/dashboard";
 import { assessmentsRouter } from "./routes/assessments";
 import { db } from "./db";
+import { clearSession, createSession, getSessionUser, setSessionCookie } from "./auth";
 import { withEffectiveCaseStatus } from "./services/ChildClassification";
 
 export const apiRouter = express.Router();
@@ -32,11 +33,24 @@ apiRouter.post("/login", async (req, res) => {
     
     if (isMatch) {
       const { password: _, ...userWithoutPassword } = user;
+      setSessionCookie(res, createSession(user.id));
       return res.json({ success: true, user: userWithoutPassword });
     }
   }
   
   res.status(401).json({ success: false, message: "شماره تماس یا رمز عبور اشتباه است" });
+});
+
+apiRouter.get("/session", (req, res) => {
+  const user = getSessionUser(req);
+  if (!user) return res.status(401).json({ success: false });
+  const { password: _, ...safeUser } = user;
+  res.json({ success: true, user: safeUser });
+});
+
+apiRouter.post("/logout", (req, res) => {
+  clearSession(req, res);
+  res.json({ success: true });
 });
 
 // ── Public Routes (Parents) ──
@@ -150,10 +164,38 @@ apiRouter.post("/children-legacy", (req, res) => {
 // ── Full Data Endpoint (temporary, for old pages) ──
 apiRouter.get("/data", (req, res) => {
   const data = db.data;
+  const viewer = getSessionUser(req);
+  if (!viewer) return res.status(401).json({ success: false, message: "برای دریافت اطلاعات وارد سامانه شوید." });
+  const isCoach = viewer?.role === "مربی";
+  const coachClasses = isCoach ? data.classes.filter(group => group.teacherId === viewer.id) : data.classes;
+  const coachClassIds = new Set(coachClasses.map(group => group.id));
+  const coachChildren = isCoach ? data.children.filter(child => child.currentClassId && coachClassIds.has(child.currentClassId)) : data.children;
+  const children = coachChildren.map(child => withEffectiveCaseStatus(child, data.alignments));
+  const coachSafeChildren = isCoach ? children.map(child => {
+    const { caseStatus, priority, statusChangeReason, statusChangeDate, ...safeChild } = child;
+    return safeChild;
+  }) : children;
+  const visibleUserIds = new Set(isCoach ? [viewer.id] : data.users.map(user => user.id));
+  const visibleChildIds = new Set(coachChildren.map(child => child.id));
   const safeData = {
     ...data,
-    children: data.children.map(child => withEffectiveCaseStatus(child, data.alignments)),
-    users: data.users.map((u: any) => {
+    centers: isCoach ? data.centers.filter(center => viewer.centerIds.includes(center.id)) : data.centers,
+    classes: coachClasses,
+    children: coachSafeChildren,
+    ...(isCoach ? {
+      teacherAssessments: [],
+      parentAssessments: [],
+      alignments: [],
+      followUps: [],
+      followUpComparisons: [],
+      referralDecisions: [],
+      enrollments: data.enrollments.filter(enrollment => visibleChildIds.has(enrollment.childId)),
+      actionItems: data.actionItems.filter(action => action.responsiblePersonId === viewer.id),
+      auditLogs: [],
+      formVersions: [],
+      permissions: {}
+    } : {}),
+    users: data.users.filter(user => visibleUserIds.has(user.id)).map((u: any) => {
       const { password, ...safeUser } = u;
       return safeUser;
     })

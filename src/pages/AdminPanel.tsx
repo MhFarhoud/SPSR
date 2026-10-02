@@ -50,7 +50,8 @@ export function AdminPanel() {
   // Permission Matrix State
   const modules = [
     { id: "cases", name: "پرونده کودکان" },
-    { id: "assessments", name: "فرم‌ها و ارزیابی‌ها" },
+    { id: "assessment_forms", name: "فرم‌های ارزیابی (تکمیل فرم)" },
+    { id: "assessment_results", name: "نتایج و وضعیت ارزیابی" },
     { id: "centers", name: "مراکز و کلاس‌ها" },
     { id: "reports", name: "گزارش‌ها" },
     { id: "admin", name: "تنظیمات سیستم" }
@@ -59,9 +60,14 @@ export function AdminPanel() {
   
   const [permissions, setPermissions] = useState<Record<string, Record<string, { view: boolean, create: boolean, edit: boolean, delete: boolean, approve: boolean }>>>({
     "ادمین": modules.reduce((acc, m) => ({ ...acc, [m.id]: { view: true, create: true, edit: true, delete: true, approve: true } }), {}),
+    "مربی": {
+      assessment_forms: { view: true, create: true, edit: false, delete: false, approve: false },
+      assessment_results: { view: false, create: false, edit: false, delete: false, approve: false },
+    },
     "سوپروایزر": {
       cases: { view: true, create: false, edit: true, delete: false, approve: true },
-      assessments: { view: true, create: false, edit: false, delete: false, approve: true },
+      assessment_forms: { view: true, create: false, edit: false, delete: false, approve: true },
+      assessment_results: { view: true, create: false, edit: false, delete: false, approve: true },
       centers: { view: true, create: true, edit: true, delete: false, approve: false },
       reports: { view: true, create: false, edit: false, delete: false, approve: false },
       admin: { view: false, create: false, edit: false, delete: false, approve: false },
@@ -73,6 +79,7 @@ export function AdminPanel() {
   const [showCoachPreview, setShowCoachPreview] = useState(false);
 
   const handleTogglePermission = (role: string, moduleId: string, action: string) => {
+    if (role === "مربی" && moduleId === "assessment_results") return;
     setPermissions(prev => {
       const rolePerms = prev[role] || {};
       const modPerms = rolePerms[moduleId] || { view: false, create: false, edit: false, delete: false, approve: false };
@@ -94,7 +101,18 @@ export function AdminPanel() {
   useEffect(() => {
     loadUsers();
     fetchPermissions()
-      .then(saved => { if (Object.keys(saved).length) setPermissions(saved); })
+      .then(saved => {
+        if (Object.keys(saved).length) setPermissions(current => ({
+          ...current,
+          ...saved,
+          "مربی": {
+            ...current["مربی"],
+            ...(saved["مربی"] || {}),
+            assessment_forms: { ...current["مربی"].assessment_forms, ...(saved["مربی"]?.assessment_forms || {}) },
+            assessment_results: { view: false, create: false, edit: false, delete: false, approve: false }
+          }
+        }));
+      })
       .catch(() => setPermissionsMessage("بارگذاری تنظیمات ذخیره‌شده ناموفق بود"))
       .finally(() => setPermissionsLoading(false));
   }, []);
@@ -367,6 +385,7 @@ export function AdminPanel() {
                 <div className="mb-4 text-sm text-gray-500">
                   <Shield className="w-4 h-4 inline ml-1" />
                   در حال ویرایش دسترسی‌های نقش <strong>{selectedRoleForMatrix}</strong> در ماژول‌های مختلف سیستم:
+                  {selectedRoleForMatrix === "مربی" && <span className="mr-2 text-amber-700">مربی فقط فرم را تکمیل می‌کند؛ دسترسی به نتیجه و وضعیت ارزیابی بسته است.</span>}
                 </div>
                 <button onClick={() => setShowCoachPreview(true)} className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 px-3 py-2 text-sm text-indigo-700 hover:bg-indigo-50"><Eye className="w-4 h-4"/>مشاهده پنل مربی</button>
                 </div>
@@ -389,19 +408,19 @@ export function AdminPanel() {
                         <tr key={module.id} className="hover:bg-gray-50">
                           <td className="px-4 py-3 text-right font-medium text-gray-800 border-l">{module.name}</td>
                           <td className="px-4 py-3 border-l">
-                            <input type="checkbox" checked={modPerms.view} onChange={() => handleTogglePermission(selectedRoleForMatrix, module.id, 'view')} className="w-4 h-4 text-indigo-600 rounded" />
+                            <input type="checkbox" checked={modPerms.view} disabled={selectedRoleForMatrix === "مربی" && module.id === "assessment_results"} onChange={() => handleTogglePermission(selectedRoleForMatrix, module.id, 'view')} className="w-4 h-4 text-indigo-600 rounded disabled:cursor-not-allowed disabled:opacity-50" />
                           </td>
                           <td className="px-4 py-3 border-l">
-                            <input type="checkbox" checked={modPerms.create} onChange={() => handleTogglePermission(selectedRoleForMatrix, module.id, 'create')} className="w-4 h-4 text-indigo-600 rounded" />
+                            <input type="checkbox" checked={modPerms.create} disabled={selectedRoleForMatrix === "مربی" && module.id === "assessment_results"} onChange={() => handleTogglePermission(selectedRoleForMatrix, module.id, 'create')} className="w-4 h-4 text-indigo-600 rounded disabled:cursor-not-allowed disabled:opacity-50" />
                           </td>
                           <td className="px-4 py-3 border-l">
-                            <input type="checkbox" checked={modPerms.edit} onChange={() => handleTogglePermission(selectedRoleForMatrix, module.id, 'edit')} className="w-4 h-4 text-indigo-600 rounded" />
+                            <input type="checkbox" checked={modPerms.edit} disabled={selectedRoleForMatrix === "مربی" && module.id === "assessment_results"} onChange={() => handleTogglePermission(selectedRoleForMatrix, module.id, 'edit')} className="w-4 h-4 text-indigo-600 rounded disabled:cursor-not-allowed disabled:opacity-50" />
                           </td>
                           <td className="px-4 py-3 border-l">
-                            <input type="checkbox" checked={modPerms.delete} onChange={() => handleTogglePermission(selectedRoleForMatrix, module.id, 'delete')} className="w-4 h-4 text-red-500 rounded" />
+                            <input type="checkbox" checked={modPerms.delete} disabled={selectedRoleForMatrix === "مربی" && module.id === "assessment_results"} onChange={() => handleTogglePermission(selectedRoleForMatrix, module.id, 'delete')} className="w-4 h-4 text-red-500 rounded disabled:cursor-not-allowed disabled:opacity-50" />
                           </td>
                           <td className="px-4 py-3">
-                            <input type="checkbox" checked={modPerms.approve} onChange={() => handleTogglePermission(selectedRoleForMatrix, module.id, 'approve')} className="w-4 h-4 text-green-500 rounded" />
+                            <input type="checkbox" checked={modPerms.approve} disabled={selectedRoleForMatrix === "مربی" && module.id === "assessment_results"} onChange={() => handleTogglePermission(selectedRoleForMatrix, module.id, 'approve')} className="w-4 h-4 text-green-500 rounded disabled:cursor-not-allowed disabled:opacity-50" />
                           </td>
                         </tr>
                       );

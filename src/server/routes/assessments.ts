@@ -5,6 +5,7 @@ import { compareAssessments } from "../alignmentEngine";
 import { compareFollowUp, suggestFollowUpPath } from "../followUpEngine";
 import { FOLLOW_UP_SCALES, followUpScaleLevel, scoreFollowUpScale } from "../../followUpScales";
 import { v4 as uuidv4 } from "uuid";
+import { getSessionUser } from "../auth";
 
 export const assessmentsRouter = express.Router();
 
@@ -22,7 +23,16 @@ function hasCompletePrimaryAnswers(answers: unknown): boolean {
 
 // Submit Teacher Assessment (TPCS)
 assessmentsRouter.post("/teacher", (req, res) => {
+  const submitter = getSessionUser(req);
+  if (!submitter) return res.status(401).json({ success: false, message: "برای ثبت فرم وارد سامانه شوید." });
   const form = req.body;
+  if (submitter.role === "مربی" && form.teacherId !== submitter.id) {
+    return res.status(403).json({ success: false, message: "مربی فقط می‌تواند فرم را با حساب خودش ثبت کند." });
+  }
+  if (submitter.role === "مربی") {
+    const childIsAssigned = db.data.children.some(child => child.id === form.childId && db.data.classes?.some(group => group.id === child.currentClassId && group.teacherId === submitter.id));
+    if (!childIsAssigned) return res.status(403).json({ success: false, message: "این کودک به کلاس‌های شما اختصاص داده نشده است." });
+  }
   if (!hasCompletePrimaryAnswers(form.answers)) {
     return res.status(400).json({ success: false, message: "برای محاسبه نتیجه باید به هر ۲۵ گویه پاسخ معتبر داده شود." });
   }
@@ -54,12 +64,16 @@ assessmentsRouter.post("/teacher", (req, res) => {
   }
 
   db.persist();
+  if (submitter?.role === "مربی") return res.json({ success: true });
   res.json({ success: true, score: form.score });
 });
 
 // Submit Parent Assessment (PPCS)
 assessmentsRouter.post("/parent", (req, res) => {
   const { verificationNationalId, ...form } = req.body || {};
+  const submitter = getSessionUser(req);
+  if (form.parentId !== "parent" && !submitter) return res.status(401).json({ success: false, message: "برای ثبت فرم وارد سامانه شوید." });
+  if (submitter?.role === "مربی") return res.status(403).json({ success: false, message: "مربی به فرم ارزیابی والد دسترسی ندارد." });
   if (!hasCompletePrimaryAnswers(form.answers)) {
     return res.status(400).json({ success: false, message: "برای محاسبه نتیجه باید به هر ۲۵ گویه پاسخ معتبر داده شود." });
   }
@@ -107,11 +121,15 @@ assessmentsRouter.post("/parent", (req, res) => {
   }
 
   db.persist();
+  if (form.parentId === "parent") return res.json({ success: true });
   res.json({ success: true, score: form.score, impact: form.impactScore });
 });
 
 // Submit Follow-Up
 assessmentsRouter.post("/followup", (req, res) => {
+  const submitter = getSessionUser(req);
+  if (!submitter) return res.status(401).json({ success: false, message: "برای ثبت فالوآپ وارد سامانه شوید." });
+  if (submitter.role === "مربی") return res.status(403).json({ success: false, message: "این نقش فقط به فرم دیدگاه مربی دسترسی دارد." });
   const followUp = req.body;
 
   const validReasons = ["نمره مرزی یا نابهنجار در فرم مربی", "نمره مرزی یا نابهنجار در فرم والد", "اختلاف بین فرم والد و مربی", "نمره تأثیر بالا", "نگرانی ثبت‌شده مربی", "تصمیم سرمربی یا تیم تخصصی", "پیگیری پس از ارائه راهکار", "پیگیری پس از شروع خدمات تخصصی", "بروز نشانه جدید"];
@@ -190,6 +208,9 @@ assessmentsRouter.post("/followup", (req, res) => {
 
 // Get assessments for a specific child (for ChildProfile tabs)
 assessmentsRouter.get("/child/:childId", (req, res) => {
+  const viewer = getSessionUser(req);
+  if (!viewer) return res.status(401).json({ success: false, message: "برای مشاهده نتیجه وارد سامانه شوید." });
+  if (viewer.role === "مربی") return res.status(403).json({ success: false, message: "مربی فقط مجاز به تکمیل فرم ارزیابی است و به نتایج دسترسی ندارد." });
   const { childId } = req.params;
   
   const teacherAssessments = db.data.teacherAssessments
@@ -236,6 +257,9 @@ assessmentsRouter.get("/child/:childId", (req, res) => {
 
 // Get timeline events for a child
 assessmentsRouter.get("/child/:childId/timeline", (req, res) => {
+  const viewer = getSessionUser(req);
+  if (!viewer) return res.status(401).json({ success: false, message: "برای مشاهده نتیجه وارد سامانه شوید." });
+  if (viewer.role === "مربی") return res.status(403).json({ success: false, message: "مربی به تاریخچه و وضعیت ارزیابی دسترسی ندارد." });
   const { childId } = req.params;
   
   const events: Array<{ date: string; type: string; title: string; details?: string }> = [];

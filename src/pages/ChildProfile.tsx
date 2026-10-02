@@ -52,7 +52,7 @@ export function ChildProfile({ user }: { user?: User }) {
       setTimeline(tl);
     });
     
-    fetch(`/api/children/${id}`)
+    fetch(`/api/children/${id}?userId=${encodeURIComponent(user?.id || "")}`)
       .then(res => res.json())
       .then(data => {
         if (data.success && data.child) {
@@ -105,8 +105,8 @@ export function ChildProfile({ user }: { user?: User }) {
   if (user?.role === "والد") {
     tabs = [{ id: "overview", label: "اطلاعات پایه", icon: UserIcon }];
   } else if (user?.role === "مربی") {
-    // PDF 2.5: مربی تب روان‌سنجی و تحلیل تخصصی را نمی‌بیند
-    tabs = tabs.filter(t => t.id !== "psychometrics");
+    // Coach can open the child profile to complete the teacher form only.
+    tabs = [{ id: "overview", label: "اطلاعات پایه", icon: UserIcon }];
   }
 
   const getStatusBadge = (status?: string) => {
@@ -153,7 +153,10 @@ export function ChildProfile({ user }: { user?: User }) {
               </div>
             </div>
           )}
-          {canManageChild && <button type="button" onClick={openEdit} className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"><Pencil className="h-4 w-4" /> ویرایش و تخصیص</button>}
+          <div className="flex items-center gap-2">
+            {user?.role === "مربی" && <button type="button" onClick={() => navigate(`/child/${child.id}/form`)} className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"><FileText className="h-4 w-4" /> تکمیل فرم مربی</button>}
+            {canManageChild && <button type="button" onClick={openEdit} className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"><Pencil className="h-4 w-4" /> ویرایش و تخصیص</button>}
+          </div>
         </div>
         <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
       </div>

@@ -29,12 +29,29 @@ import type { User } from "./types";
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
+  const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
-    const saved = localStorage.getItem("auth_user");
-    if (saved) {
-      try { setUser(JSON.parse(saved)); } catch (e) {}
+    if (window.location.pathname.startsWith("/p/")) {
+      setCheckingSession(false);
+      return;
     }
+    if (!localStorage.getItem("auth_user")) {
+      setCheckingSession(false);
+      return;
+    }
+    fetch("/api/session")
+      .then(response => response.ok ? response.json() : null)
+      .then(result => {
+        if (result?.success && result.user) {
+          setUser(result.user);
+          localStorage.setItem("auth_user", JSON.stringify(result.user));
+        } else {
+          localStorage.removeItem("auth_user");
+        }
+      })
+      .catch(() => localStorage.removeItem("auth_user"))
+      .finally(() => setCheckingSession(false));
   }, []);
 
   const handleLogin = (u: User) => {
@@ -45,9 +62,14 @@ export default function App() {
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem("auth_user");
+    void fetch("/api/logout", { method: "POST" }).catch(() => undefined);
   };
 
   const isPublicRoute = window.location.pathname.startsWith('/p/');
+
+  if (checkingSession && !isPublicRoute) {
+    return <div className="p-8 text-center text-gray-500">در حال بررسی نشست کاربری...</div>;
+  }
 
   if (!user && !isPublicRoute) {
     return <Login onLogin={handleLogin} />;
@@ -81,7 +103,7 @@ export default function App() {
               <Route path="/child/:id" element={<ChildProfile user={user} />} />
               <Route path="/child/:id/form" element={<TeacherForm user={user} />} />
               {user.role !== "مربی" && <Route path="/child/:id/parent-form" element={<ParentForm user={user} />} />}
-              <Route path="/child/:id/followup/new" element={<FollowUpForm user={user} />} />
+              {user.role !== "مربی" && <Route path="/child/:id/followup/new" element={<FollowUpForm user={user} />} />}
               <Route path="/children/*" element={<ChildrenList user={user} />} />
             </>
           )}
@@ -112,7 +134,7 @@ export default function App() {
           )}
           
           {/* Cases — not for therapist */}
-          {!isTherapist && (
+          {!isTherapist && user.role !== "مربی" && (
             <>
               <Route path="/cases" element={<CasesModule user={user} />} />
               <Route path="/cases/*" element={<CasesModule user={user} />} />
@@ -129,7 +151,7 @@ export default function App() {
           )}
           
           {/* Reports — not for therapist */}
-          {!isTherapist && (
+          {!isTherapist && user.role !== "مربی" && (
             <>
               <Route path="/reports" element={<ReportsModule user={user} />} />
               <Route path="/reports/*" element={<ReportsModule user={user} />} />

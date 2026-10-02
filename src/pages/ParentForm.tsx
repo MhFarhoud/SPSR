@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
-import { User, ParentAssessment, AssessmentAnswer } from "../types";
+import { User, ParentAssessment, AssessmentAnswer, Child } from "../types";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
 import { fetchData, submitParentForm } from "../api";
 import { calculateExactAge } from "../utils/ageCalculator";
@@ -66,7 +66,7 @@ const SERVICES_OPTIONS = [
   "هیچ‌کدام"
 ];
 
-export function ParentForm({ user, childIdParam, verificationNationalId, onSuccess }: { user: User, childIdParam?: string, verificationNationalId?: string, onSuccess?: () => void }) {
+export function ParentForm({ user, childIdParam, verificationNationalId, childProfile, onSuccess }: { user: User, childIdParam?: string, verificationNationalId?: string, childProfile?: Child, onSuccess?: () => void }) {
   const { id: paramId } = useParams<{ id: string }>();
   const id = childIdParam || paramId;
   const navigate = useNavigate();
@@ -102,19 +102,26 @@ export function ParentForm({ user, childIdParam, verificationNationalId, onSucce
   const [error, setError] = useState("");
 
   useEffect(() => {
+    const applyChildProfile = (c: Child, centers: Array<{ id: string; name: string; region?: string }> = []) => {
+      setChildName(`${c.firstName} ${c.lastName}`);
+      setChildGender(c.gender);
+      const center = centers.find(item => item.id === c.currentCenterId);
+      setCenterName(center?.name || "");
+      setCenterRegion(center?.region || "");
+      const age = calculateExactAge(c.birthDate);
+      setChildAge(age ? age.formatted : "نامشخص");
+    };
+
+    if (childProfile) {
+      applyChildProfile(childProfile);
+      return;
+    }
+
     fetchData().then(data => {
-      const c = data.children.find(ch => ch.id === id);
-      if (c) {
-        setChildName(`${c.firstName} ${c.lastName}`);
-        setChildGender(c.gender);
-        const center = data.centers.find(item => item.id === c.currentCenterId);
-        setCenterName(center?.name || "");
-        setCenterRegion(center?.region || "");
-        const age = calculateExactAge(c.birthDate);
-        setChildAge(age ? age.formatted : "نامشخص");
-      }
-    });
-  }, [id]);
+      const c = data.children?.find(ch => ch.id === id);
+      if (c) applyChildProfile(c, data.centers || []);
+    }).catch(() => setError("بارگذاری اطلاعات کودک ناموفق بود."));
+  }, [id, childProfile]);
 
   const toggleArrayItem = (setter: React.Dispatch<React.SetStateAction<string[]>>, array: string[], item: string) => {
     if (item === "هیچ‌کدام") {

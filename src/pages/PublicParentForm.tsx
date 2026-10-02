@@ -115,6 +115,7 @@ export function PublicParentForm() {
             user={dummyParentUser} 
             childIdParam={child.id}
             verificationNationalId={nationalId}
+            childProfile={child}
             onSuccess={() => setSubmitted(true)}
           />
         </div>

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Users, FileText, Activity, Briefcase, ArrowLeft } from "lucide-react";
+import { Users, Briefcase, ArrowLeft } from "lucide-react";
 import { fetchData } from "../../api";
 import type { User, AppData } from "../../types";
 
@@ -20,15 +20,10 @@ export function TeacherDashboard({ user }: { user: User }) {
   const myClasses = data.classes?.filter(c => c.teacherId === user.id) || [];
   const myClassIds = myClasses.map(c => c.id);
   const myChildren = data.children.filter(c => c.currentClassId && myClassIds.includes(c.currentClassId));
-  const myAssessments = data.teacherAssessments.filter(a => a.teacherId === user.id);
-  const incompleteAssessments = myAssessments.filter(a => a.status !== "SUBMITTED" && a.status !== "LOCKED" && a.status !== "ثبت_نهایی_شده");
-  const myFollowUps = data.followUps.filter(f => f.teacherId === user.id && f.status !== "SUBMITTED" && f.status !== "ثبت_نهایی_شده");
   const myActions = data.actionItems.filter(a => a.responsiblePersonId === user.id && a.status !== "انجام_شده");
 
   const cards = [
     { label: "تعداد کودکان من", value: myChildren.length, icon: Users, color: "bg-blue-500", link: "/children" },
-    { label: "فرم‌های تکمیل‌نشده", value: incompleteAssessments.length, icon: FileText, color: "bg-red-500", link: "/assessments/mine" },
-    { label: "فالوآپ‌های فعال", value: myFollowUps.length, icon: Activity, color: "bg-orange-500", link: "/cases/followup" },
     { label: "اقدامات محول‌شده", value: myActions.length, icon: Briefcase, color: "bg-purple-500", link: "/actions/mine" }
   ];
 
@@ -42,7 +37,7 @@ export function TeacherDashboard({ user }: { user: User }) {
       </div>
 
       {/* Summary Cards — clickable per PDF 2-1 */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         {cards.map((card, idx) => {
           const Icon = card.icon;
           return (
@@ -98,8 +93,6 @@ export function TeacherDashboard({ user }: { user: User }) {
           </div>
           <div className="space-y-2 max-h-80 overflow-y-auto">
             {myChildren.slice(0, 10).map(child => {
-              const hasForm = myAssessments.some(a => a.childId === child.id);
-              const hasFollowUp = myFollowUps.some(f => f.childId === child.id);
               const hasAction = myActions.some(a => a.childId === child.id);
               return (
                 <Link key={child.id} to={`/child/${child.id}`} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
@@ -108,8 +101,6 @@ export function TeacherDashboard({ user }: { user: User }) {
                     <p className="text-xs text-gray-500">{child.currentStage}</p>
                   </div>
                   <div className="flex gap-1">
-                    {!hasForm && <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">فرم ناقص</span>}
-                    {hasFollowUp && <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">فالوآپ</span>}
                     {hasAction && <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">اقدام</span>}
                   </div>
                 </Link>
@@ -122,8 +113,7 @@ export function TeacherDashboard({ user }: { user: User }) {
       {/* Shortcuts — PDF 2-4 */}
       <div className="flex flex-wrap gap-3">
         <Link to="/children" className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-100 transition-colors">مشاهده کودکان من</Link>
-        <Link to="/assessments/mine" className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-100 transition-colors">تکمیل فرم</Link>
-        <Link to="/cases/followup" className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-100 transition-colors">فالوآپ‌های من</Link>
+        <Link to="/assessments/teacher" className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-100 transition-colors">تکمیل فرم ارزیابی</Link>
         <Link to="/actions/mine" className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-100 transition-colors">اقدامات من</Link>
       </div>
     </div>

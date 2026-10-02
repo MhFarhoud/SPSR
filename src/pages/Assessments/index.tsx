@@ -3,7 +3,7 @@ import { fetchData } from "../../api";
 import type { User, TeacherAssessment, ParentAssessment, AlignmentResult, AppData } from "../../types";
 import { FileText, ClipboardList, GraduationCap, Users as UsersIcon, LineChart } from "lucide-react";
 import { Tabs, Tab } from "../../components/ui/Tabs";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Badge } from "../../components/ui/Badge";
 import { AssessmentScoreSummary } from "../../components/AssessmentScoreSummary";
 
@@ -48,19 +48,46 @@ export function AssessmentsModule({ user }: { user: User }) {
 
   if (loading || !data) return <div className="p-8 text-center text-gray-500">در حال بارگذاری...</div>;
 
+  if (user.role === "مربی") {
+    const myClasses = data.classes?.filter(group => group.teacherId === user.id) || [];
+    const myClassIds = new Set(myClasses.map(group => group.id));
+    const assignedChildren = data.children.filter(child => child.currentClassId && myClassIds.has(child.currentClassId));
+
+    return (
+      <div className="space-y-6 pb-20">
+        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+          <h2 className="text-xl font-bold text-gray-900">تکمیل فرم ارزیابی مربی</h2>
+          <p className="mt-2 text-sm text-gray-500">کودک را انتخاب کنید و فرم دیدگاه مربی را تکمیل کنید.</p>
+        </div>
+        {assignedChildren.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center text-gray-500">هنوز کودکی به کلاس‌های شما اختصاص داده نشده است.</div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
+            {assignedChildren.map(child => {
+              const childClass = myClasses.find(group => group.id === child.currentClassId);
+              return (
+                <div key={child.id} className="flex items-center justify-between gap-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                  <div>
+                    <p className="font-semibold text-gray-900">{child.firstName} {child.lastName}</p>
+                    <p className="mt-1 text-sm text-gray-500">{childClass?.name || child.currentStage}</p>
+                  </div>
+                  <Link to={`/child/${child.id}/form`} className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+                    <FileText className="h-4 w-4" /> تکمیل فرم
+                  </Link>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   let allowedTeacherForms = data.teacherAssessments;
   let allowedParentForms = data.parentAssessments;
   let allowedAlignments = data.alignments;
 
-  if (user.role === "مربی") {
-    // Teacher only sees forms they submitted or forms for children in their classes
-    const userClasses = data.classes?.filter(c => c.teacherId === user.id) || [];
-    const classChildIds = data.children.filter(c => c.currentClassId && userClasses.map(uc => uc.id).includes(c.currentClassId)).map(c => c.id);
-    
-    allowedTeacherForms = data.teacherAssessments.filter(f => f.teacherId === user.id || classChildIds.includes(f.childId));
-    allowedParentForms = [];
-    allowedAlignments = data.alignments.filter(a => classChildIds.includes(a.childId));
-  } else if (user.role === "سرمربی") {
+  if (user.role === "سرمربی") {
     // Head Coach sees forms for their centers
     const centerChildIds = data.children.filter(c => user.centerIds.includes(c.currentCenterId)).map(c => c.id);
     allowedTeacherForms = data.teacherAssessments.filter(f => centerChildIds.includes(f.childId));

@@ -5,6 +5,7 @@ import multer from "multer";
 import { childRepository } from "../repositories/ChildRepository";
 import { db } from "../db";
 import { withEffectiveCaseStatus } from "../services/ChildClassification";
+import { getSessionUser } from "../auth";
 import { v4 as uuidv4 } from "uuid";
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -14,17 +15,32 @@ childrenRouter.get("/", (req, res) => {
   const page = parseInt(req.query.page as string) || 1;
   const pageSize = parseInt(req.query.pageSize as string) || 10;
   const search = req.query.search as string | undefined;
-  const userId = req.query.userId as string | undefined;
+  const viewer = getSessionUser(req);
+  if (!viewer) return res.status(401).json({ success: false, message: "برای مشاهده پرونده‌ها وارد سامانه شوید." });
   const archive = req.query.archive === "true";
-  const status = req.query.status as string | undefined;
+  const status = viewer?.role === "مربی" ? undefined : req.query.status as string | undefined;
 
-  const result = childService.listChildren(page, pageSize, search, userId, archive, status);
+  const result = childService.listChildren(page, pageSize, search, viewer.id, archive, status);
+  if (viewer?.role === "مربی") {
+    result.data = result.data.map(child => {
+      const { caseStatus, priority, statusChangeReason, statusChangeDate, ...safeChild } = child;
+      return safeChild;
+    });
+  }
   res.json({ success: true, ...result });
 });
 
 childrenRouter.get("/:id", (req, res) => {
+  const viewer = getSessionUser(req);
+  if (!viewer) return res.status(401).json({ success: false, message: "برای مشاهده پرونده وارد سامانه شوید." });
   const child = childService.getChild(req.params.id);
   if (child) {
+    if (viewer.role === "مربی") {
+      const assignedClass = db.data.classes?.some(group => group.id === child.currentClassId && group.teacherId === viewer.id);
+      if (!assignedClass) return res.status(403).json({ success: false, message: "این پرونده در کلاس‌های شما نیست." });
+      const { caseStatus, priority, statusChangeReason, statusChangeDate, ...safeChild } = child;
+      return res.json({ success: true, child: safeChild });
+    }
     res.json({ success: true, child: withEffectiveCaseStatus(child, db.data.alignments) });
   } else {
     res.status(404).json({ success: false, message: "کودک یافت نشد" });
