@@ -5,7 +5,7 @@ import { FileText, ClipboardList, GraduationCap, Users as UsersIcon, LineChart }
 import { Tabs, Tab } from "../../components/ui/Tabs";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Badge } from "../../components/ui/Badge";
-import { AssessmentScoreSummary } from "../../components/AssessmentScoreSummary";
+import { AssessmentScoreSummary, ASSESSMENT_SCALE_NAMES } from "../../components/AssessmentScoreSummary";
 
 export function AssessmentsModule({ user }: { user: User }) {
   const location = useLocation();
@@ -181,7 +181,7 @@ export function AssessmentsModule({ user }: { user: User }) {
             <tr key={i} className="hover:bg-gray-50">
               <td className="px-6 py-4 text-indigo-600 font-medium cursor-pointer hover:underline" onClick={() => navigate(`/child/${a.childId}`)}>{a.childId}</td>
               <td className="px-6 py-4 text-gray-500" dir="ltr">{new Date(a.createdAt).toLocaleDateString('fa-IR')}</td>
-              <td className="px-6 py-4 text-red-600 font-medium">{a.misalignedAreas.length > 0 ? a.misalignedAreas.join("، ") : "ندارد (کاملاً همسو)"}</td>
+              <td className="px-6 py-4 text-red-600 font-medium">{a.misalignedAreas.length > 0 ? a.misalignedAreas.map(area => ASSESSMENT_SCALE_NAMES[area] || area).join("، ") : "ندارد (کاملاً همسو)"}</td>
               <td className="px-6 py-4">
                 {a.misalignmentSeverity === "خفیف" ? <Badge variant="info">خفیف</Badge> : <Badge variant="danger">قابل‌توجه</Badge>}
               </td>

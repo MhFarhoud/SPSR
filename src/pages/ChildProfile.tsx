@@ -3,7 +3,7 @@ import { fetchData, updateAction } from "../api";
 import { useParams, useNavigate } from "react-router-dom";
 import { Tabs, Tab } from "../components/ui/Tabs";
 import { Badge } from "../components/ui/Badge";
-import { AssessmentScoreSummary } from "../components/AssessmentScoreSummary";
+import { AssessmentScoreSummary, ASSESSMENT_SCALE_NAMES } from "../components/AssessmentScoreSummary";
 import { Child, User, TeacherAssessment, ParentAssessment, AlignmentResult, FollowUp, Center, ClassGroup, ActionItem } from "../types";
 import { User as UserIcon, Activity, FileText, CheckSquare, Target, Settings, Plus, ListTodo, AlertTriangle, Pencil, X, Trash2 } from "lucide-react";
 import { calculateExactAge } from "../utils/ageCalculator";
@@ -412,7 +412,7 @@ export function ChildProfile({ user }: { user?: User }) {
                         {alignment.misalignedAreas.length > 0 ? (
                           <div className="flex flex-wrap gap-2">
                             {alignment.misalignedAreas.map(area => (
-                              <span key={area} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">{area}</span>
+                              <span key={area} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">{ASSESSMENT_SCALE_NAMES[area] || area}</span>
                             ))}
                           </div>
                         ) : (
