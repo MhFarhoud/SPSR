@@ -70,8 +70,8 @@ export function FollowUpForm({ user }: { user: User }) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (targetDomains.length === 0 || targetDomains.length > 2) {
-      alert("لطفاً یک یا حداکثر دو حوزه هدف انتخاب کنید.");
+    if (targetDomains.length === 0) {
+      alert("لطفاً دست‌کم یک حوزه هدف انتخاب کنید.");
       return;
     }
     const requiredQuestionIds: number[] = [...new Set<number>(targetDomains.flatMap((domain): number[] => {
@@ -79,7 +79,7 @@ export function FollowUpForm({ user }: { user: User }) {
       return scale ? [...scale.questions] : [];
     }))];
     if (requiredQuestionIds.some(questionId => answers[questionId] === undefined)) {
-      alert("لطفاً به هر پنج گویه هر حوزه انتخاب‌شده پاسخ دهید.");
+      alert("لطفاً به هر پنج گویهٔ همهٔ حوزه‌های انتخاب‌شده پاسخ دهید.");
       return;
     }
     if (!targetBehavior.trim()) {
@@ -179,11 +179,11 @@ export function FollowUpForm({ user }: { user: User }) {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">حوزه هدف (حداکثر دو حوزه)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">حوزه‌های هدف (همهٔ حوزه‌های نیازمند پیگیری را انتخاب کنید)</label>
               <div className="space-y-2 rounded-lg border border-gray-200 p-3">
                 {FOLLOW_UP_SCALES.filter(scale => availableTargetDomains.includes(scale.domain)).map(scale => (
                   <label key={scale.domain} className="flex items-center gap-2 text-sm text-gray-800 cursor-pointer">
-                    <input type="checkbox" checked={targetDomains.includes(scale.domain)} disabled={!targetDomains.includes(scale.domain) && targetDomains.length >= 2} onChange={event => setTargetDomains(current => event.target.checked ? [...current, scale.domain] : current.filter(domain => domain !== scale.domain))} className="rounded text-indigo-600" />
+                    <input type="checkbox" checked={targetDomains.includes(scale.domain)} onChange={event => setTargetDomains(current => event.target.checked ? [...current, scale.domain] : current.filter(domain => domain !== scale.domain))} className="rounded text-indigo-600" />
                     {scale.label}
                   </label>
                 ))}
@@ -201,7 +201,7 @@ export function FollowUpForm({ user }: { user: User }) {
           <div className="bg-white border rounded-xl p-6 space-y-6">
             <div>
               <h3 className="text-lg font-bold text-indigo-900 border-b pb-2">۴. گویه‌های اختصاصی حوزه هدف</h3>
-              <p className="mt-3 text-sm text-gray-600">فقط پنج گویه مربوط به حوزه انتخاب‌شده نمایش داده می‌شود. پاسخ‌ها بر اساس مقیاس فرم مربی نمره‌گذاری می‌شوند؛ برای این بخش نمره کل محاسبه نمی‌شود.</p>
+              <p className="mt-3 text-sm text-gray-600">پنج گویهٔ هر یک از حوزه‌های انتخاب‌شده نمایش داده می‌شود. پاسخ‌ها بر اساس مقیاس فرم مربی نمره‌گذاری می‌شوند؛ برای این بخش نمرهٔ کل محاسبه نمی‌شود.</p>
             </div>
             <div className="divide-y divide-gray-100">
               {FOLLOW_UP_SCALES.filter(scale => targetDomains.includes(scale.domain)).map(scale => (

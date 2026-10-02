@@ -195,8 +195,8 @@ assessmentsRouter.post("/followup", (req, res) => {
   if (followUp.newBehaviorObserved && !String(followUp.newBehaviorDescription || "").trim()) return res.status(400).json({ success: false, message: "توضیح کوتاه رفتار جدید الزامی است." });
   if (Array.isArray(followUp.newBehaviorKeywords) && followUp.newBehaviorKeywords.length > 3) return res.status(400).json({ success: false, message: "حداکثر سه واژه کلیدی برای رفتار جدید وارد کنید." });
 
-  if (!Array.isArray(followUp.targetDomains) || followUp.targetDomains.length < 1 || followUp.targetDomains.length > 2) {
-    return res.status(400).json({ success: false, message: "یک یا دو حوزه فالوآپ باید انتخاب شود." });
+  if (!Array.isArray(followUp.targetDomains) || followUp.targetDomains.length < 1) {
+    return res.status(400).json({ success: false, message: "حداقل یک حوزه فالوآپ باید انتخاب شود." });
   }
   if (followUp.targetDomains.some((domain: string) => !FOLLOW_UP_SCALES.some(scale => scale.domain === domain))) {
     return res.status(400).json({ success: false, message: "حوزه انتخاب‌شده معتبر نیست." });
