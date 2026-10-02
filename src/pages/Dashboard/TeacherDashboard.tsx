@@ -23,7 +23,7 @@ export function TeacherDashboard({ user }: { user: User }) {
   const myActions = data.actionItems.filter(a => a.responsiblePersonId === user.id && a.status !== "انجام_شده");
 
   const cards = [
-    { label: "تعداد کودکان من", value: myChildren.length, icon: Users, color: "bg-blue-500", link: "/children" },
+    { label: "تعداد کودکان من", value: myChildren.length, icon: Users, color: "bg-blue-500", link: "/assessments/mine" },
     { label: "اقدامات محول‌شده", value: myActions.length, icon: Briefcase, color: "bg-purple-500", link: "/actions/mine" }
   ];
 
@@ -75,8 +75,8 @@ export function TeacherDashboard({ user }: { user: User }) {
                         {isOverdue && ' — عقب‌افتاده'}
                       </p>
                     </div>
-                    <Link to={`/child/${action.childId}`} className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
-                      ورود <ArrowLeft className="w-3 h-3" />
+                    <Link to={`/child/${action.childId}/form`} className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+                      تکمیل فرم <ArrowLeft className="w-3 h-3" />
                     </Link>
                   </div>
                 );
@@ -89,13 +89,13 @@ export function TeacherDashboard({ user }: { user: User }) {
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-medium text-gray-900">کودکان من</h3>
-            <Link to="/children" className="text-sm text-indigo-600 hover:text-indigo-800">مشاهده همه</Link>
+            <Link to="/assessments/mine" className="text-sm text-indigo-600 hover:text-indigo-800">مشاهده فرم‌های من</Link>
           </div>
           <div className="space-y-2 max-h-80 overflow-y-auto">
             {myChildren.slice(0, 10).map(child => {
               const hasAction = myActions.some(a => a.childId === child.id);
               return (
-                <Link key={child.id} to={`/child/${child.id}`} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
+                <Link key={child.id} to={`/child/${child.id}/form`} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
                   <div>
                     <p className="text-sm font-medium text-gray-900">{child.firstName} {child.lastName}</p>
                     <p className="text-xs text-gray-500">{child.currentStage}</p>
@@ -112,7 +112,7 @@ export function TeacherDashboard({ user }: { user: User }) {
 
       {/* Shortcuts — PDF 2-4 */}
       <div className="flex flex-wrap gap-3">
-        <Link to="/children" className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-100 transition-colors">مشاهده کودکان من</Link>
+        <Link to="/assessments/mine" className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-100 transition-colors">فرم‌های کودکان من</Link>
         <Link to="/assessments/teacher" className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-100 transition-colors">تکمیل فرم ارزیابی</Link>
         <Link to="/actions/mine" className="px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-100 transition-colors">اقدامات من</Link>
       </div>

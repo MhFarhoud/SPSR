@@ -32,7 +32,7 @@ export class ChildService {
       ...data,
       id: uuidv4(),
       childId: this.generateChildId(),
-      caseStatus: "عادی" as CaseStatus,
+      caseStatus: "در_حال_ارزیابی" as CaseStatus,
       priority: "عادی" as Priority,
       archived: false,
       createdAt: new Date().toISOString(),
@@ -67,7 +67,7 @@ export class ChildService {
       pageSize,
       (child) => {
         if (!!child.archived !== archived) return false;
-        if (status && withEffectiveCaseStatus(child, db.data.alignments, [...db.data.teacherAssessments, ...db.data.parentAssessments]).caseStatus !== status) return false;
+        if (status && withEffectiveCaseStatus(child, db.data.alignments, [...db.data.teacherAssessments, ...db.data.parentAssessments], db.data.followUps).caseStatus !== status) return false;
         if (allowedCenterIds && !allowedCenterIds.includes(child.currentCenterId)) return false;
         if (allowedClassIds && (!child.currentClassId || !allowedClassIds.includes(child.currentClassId))) return false;
 
@@ -82,7 +82,7 @@ export class ChildService {
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
     const assessments = [...db.data.teacherAssessments, ...db.data.parentAssessments];
-    return { ...result, data: result.data.map(child => withEffectiveCaseStatus(child, db.data.alignments, assessments)) };
+    return { ...result, data: result.data.map(child => withEffectiveCaseStatus(child, db.data.alignments, assessments, db.data.followUps)) };
   }
 }
 

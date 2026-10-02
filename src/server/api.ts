@@ -171,16 +171,21 @@ apiRouter.get("/data", (req, res) => {
   const coachClassIds = new Set(coachClasses.map(group => group.id));
   const coachChildren = isCoach ? data.children.filter(child => child.currentClassId && coachClassIds.has(child.currentClassId)) : data.children;
   const assessments = [...data.teacherAssessments, ...data.parentAssessments];
-  const children = coachChildren.map(child => withEffectiveCaseStatus(child, data.alignments, assessments));
-  const coachSafeChildren = isCoach ? children.map(child => {
-    const { caseStatus, priority, statusChangeReason, statusChangeDate, ...safeChild } = child;
-    return safeChild;
-  }) : children;
+  const children = coachChildren.map(child => withEffectiveCaseStatus(child, data.alignments, assessments, data.followUps));
+  const coachSafeChildren = isCoach ? coachChildren.map(child => ({
+    id: child.id,
+    firstName: child.firstName,
+    lastName: child.lastName,
+    birthDate: child.birthDate,
+    gender: child.gender,
+    currentClassId: child.currentClassId,
+    currentStage: child.currentStage
+  })) : children;
   const visibleUserIds = new Set(isCoach ? [viewer.id] : data.users.map(user => user.id));
   const visibleChildIds = new Set(coachChildren.map(child => child.id));
   const safeData = {
     ...data,
-    centers: isCoach ? data.centers.filter(center => viewer.centerIds.includes(center.id)) : data.centers,
+    centers: isCoach ? [] : data.centers,
     classes: coachClasses,
     children: coachSafeChildren,
     ...(isCoach ? {
@@ -195,7 +200,7 @@ apiRouter.get("/data", (req, res) => {
       followUps: [],
       followUpComparisons: [],
       referralDecisions: [],
-      enrollments: data.enrollments.filter(enrollment => visibleChildIds.has(enrollment.childId)),
+      enrollments: [],
       actionItems: data.actionItems.filter(action => action.responsiblePersonId === viewer.id),
       auditLogs: [],
       formVersions: [],

@@ -97,14 +97,14 @@ export default function App() {
           {/* Children routes — not available to therapist */}
           {!isTherapist && (
             <>
-              <Route path="/children" element={<ChildrenList user={user} />} />
-              <Route path="/children/new" element={<ChildRegistration user={user} />} />
-              <Route path="/children/import" element={<ImportExcel user={user} />} />
-              <Route path="/child/:id" element={<ChildProfile user={user} />} />
+              {user.role !== "مربی" && <Route path="/children" element={<ChildrenList user={user} />} />}
+              {user.role !== "مربی" && <Route path="/children/new" element={<ChildRegistration user={user} />} />}
+              {user.role !== "مربی" && <Route path="/children/import" element={<ImportExcel user={user} />} />}
+              {user.role !== "مربی" && <Route path="/child/:id" element={<ChildProfile user={user} />} />}
               <Route path="/child/:id/form" element={<TeacherForm user={user} />} />
               {user.role !== "مربی" && <Route path="/child/:id/parent-form" element={<ParentForm user={user} />} />}
               {user.role !== "مربی" && <Route path="/child/:id/followup/new" element={<FollowUpForm user={user} />} />}
-              <Route path="/children/*" element={<ChildrenList user={user} />} />
+              {user.role !== "مربی" && <Route path="/children/*" element={<ChildrenList user={user} />} />}
             </>
           )}
           

@@ -22,7 +22,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "داشبورد", icon: LayoutDashboard, path: "/" },
   { 
     label: "کودکان", icon: Users, path: "/children",
-    hiddenFor: ["درمانگر"],
+    hiddenFor: ["درمانگر", "مربی"],
     subItems: [
       { label: "همه کودکان", path: "/children" },
       { label: "افزودن کودک", path: "/children/new" },

@@ -17,31 +17,21 @@ childrenRouter.get("/", (req, res) => {
   const search = req.query.search as string | undefined;
   const viewer = getSessionUser(req);
   if (!viewer) return res.status(401).json({ success: false, message: "برای مشاهده پرونده‌ها وارد سامانه شوید." });
+  if (viewer.role === "مربی") return res.status(403).json({ success: false, message: "مربی به فهرست پرونده‌ها دسترسی ندارد؛ برای ثبت فرم از بخش ارزیابی‌های من اقدام کنید." });
   const archive = req.query.archive === "true";
-  const status = viewer?.role === "مربی" ? undefined : req.query.status as string | undefined;
+  const status = req.query.status as string | undefined;
 
   const result = childService.listChildren(page, pageSize, search, viewer.id, archive, status);
-  if (viewer?.role === "مربی") {
-    result.data = result.data.map(child => {
-      const { caseStatus, priority, statusChangeReason, statusChangeDate, ...safeChild } = child;
-      return safeChild;
-    });
-  }
   res.json({ success: true, ...result });
 });
 
 childrenRouter.get("/:id", (req, res) => {
   const viewer = getSessionUser(req);
   if (!viewer) return res.status(401).json({ success: false, message: "برای مشاهده پرونده وارد سامانه شوید." });
+  if (viewer.role === "مربی") return res.status(403).json({ success: false, message: "مربی به جزئیات پرونده کودک دسترسی ندارد؛ برای ثبت فرم از بخش ارزیابی‌های من اقدام کنید." });
   const child = childService.getChild(req.params.id);
   if (child) {
-    if (viewer.role === "مربی") {
-      const assignedClass = db.data.classes?.some(group => group.id === child.currentClassId && group.teacherId === viewer.id);
-      if (!assignedClass) return res.status(403).json({ success: false, message: "این پرونده در کلاس‌های شما نیست." });
-      const { caseStatus, priority, statusChangeReason, statusChangeDate, ...safeChild } = child;
-      return res.json({ success: true, child: safeChild });
-    }
-    res.json({ success: true, child: withEffectiveCaseStatus(child, db.data.alignments, [...db.data.teacherAssessments, ...db.data.parentAssessments]) });
+    res.json({ success: true, child: withEffectiveCaseStatus(child, db.data.alignments, [...db.data.teacherAssessments, ...db.data.parentAssessments], db.data.followUps) });
   } else {
     res.status(404).json({ success: false, message: "کودک یافت نشد" });
   }
@@ -93,7 +83,7 @@ childrenRouter.patch("/:id", (req, res) => {
   }
   childRepository.save(child);
   db.persist();
-  res.json({ success: true, child: withEffectiveCaseStatus(child, db.data.alignments, [...db.data.teacherAssessments, ...db.data.parentAssessments]) });
+  res.json({ success: true, child: withEffectiveCaseStatus(child, db.data.alignments, [...db.data.teacherAssessments, ...db.data.parentAssessments], db.data.followUps) });
 });
 
 childrenRouter.patch("/:id/archive", (req, res) => {
@@ -116,7 +106,7 @@ childrenRouter.patch("/:id/archive", (req, res) => {
     timestamp: new Date().toISOString(), details: archived ? "پرونده بایگانی شد" : "پرونده از بایگانی خارج شد"
   });
   db.persist();
-  res.json({ success: true, child: withEffectiveCaseStatus(child, db.data.alignments, [...db.data.teacherAssessments, ...db.data.parentAssessments]) });
+  res.json({ success: true, child: withEffectiveCaseStatus(child, db.data.alignments, [...db.data.teacherAssessments, ...db.data.parentAssessments], db.data.followUps) });
 });
 
 childrenRouter.post("/", (req, res) => {

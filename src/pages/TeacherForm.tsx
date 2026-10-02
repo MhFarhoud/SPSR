@@ -181,20 +181,20 @@ export function TeacherForm({ user }: { user: User }) {
       });
       const result = await res.json();
       if (!res.ok || !result.success) throw new Error(result.message || "ثبت فرم ناموفق بود.");
-      navigate(`/child/${id}`);
+      navigate(user.role === "مربی" ? "/assessments/mine" : `/child/${id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "ثبت فرم ناموفق بود.");
     }
   };
 
   if (editId && !editingAssessment) {
-    return <div className="mx-auto max-w-3xl p-8 text-center text-gray-600">{error || "در حال بارگذاری فرم برای ویرایش..."}<div><Link className="mt-4 inline-flex text-indigo-600 hover:underline" to={`/child/${id}`}>بازگشت به پرونده کودک</Link></div></div>;
+    return <div className="mx-auto max-w-3xl p-8 text-center text-gray-600">{error || "در حال بارگذاری فرم برای ویرایش..."}<div><Link className="mt-4 inline-flex text-indigo-600 hover:underline" to={user.role === "مربی" ? "/assessments/mine" : `/child/${id}`}>بازگشت</Link></div></div>;
   }
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-20">
       <div className="flex items-center gap-4 border-b border-gray-100 pb-4">
-        <Link to={`/child/${id}`} className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
+        <Link to={user.role === "مربی" ? "/assessments/mine" : `/child/${id}`} className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
           <ArrowRight className="w-5 h-5" />
         </Link>
         <div>

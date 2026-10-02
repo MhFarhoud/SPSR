@@ -1,4 +1,4 @@
-import type { AlignmentResult, AssessmentScore, CaseStatus, Child } from "../../types";
+import type { AlignmentResult, AssessmentScore, CaseStatus, Child, FollowUp } from "../../types";
 
 export type ScoredAssessment = {
   id: string;
@@ -17,7 +17,8 @@ function timestamp(value?: string): number {
 export function getEffectiveCaseStatus(
   child: Child,
   alignments: AlignmentResult[] = [],
-  assessments: ScoredAssessment[] = []
+  assessments: ScoredAssessment[] = [],
+  followUps: FollowUp[] = []
 ): CaseStatus | undefined {
   const childAssessments = assessments.filter(assessment => assessment.childId === child.id && assessment.score);
   const latestAssessmentsByType = ["TPCS", "PPCS"].map(formType => childAssessments
@@ -33,7 +34,11 @@ export function getEffectiveCaseStatus(
     : undefined;
   const latestAssessmentAt = Math.max(0, ...childAssessments.map(assessment => timestamp(assessment.submittedAt || assessment.updatedAt || assessment.createdAt)));
   const latestAlignmentAt = timestamp(latest?.createdAt);
-  const latestEvaluationAt = Math.max(latestAssessmentAt, latestAlignmentAt);
+  const latestFollowUp = followUps
+    .filter(item => item.childId === child.id && ["SUBMITTED", "ثبت_نهایی_شده", "LOCKED"].includes(item.status))
+    .sort((a, b) => timestamp(b.submittedAt || b.createdAt) - timestamp(a.submittedAt || a.createdAt))[0];
+  const latestFollowUpAt = timestamp(latestFollowUp?.submittedAt || latestFollowUp?.createdAt);
+  const latestEvaluationAt = Math.max(latestAssessmentAt, latestAlignmentAt, latestFollowUpAt);
 
   // A manual case decision made after the latest evaluation remains authoritative.
   if (child.statusChangeDate && timestamp(child.statusChangeDate) >= latestEvaluationAt) {
@@ -41,7 +46,7 @@ export function getEffectiveCaseStatus(
   }
 
   // Prefer the joint parent/teacher decision when it reflects the latest submitted forms.
-  if (latest && latestAlignmentAt >= latestAssessmentAt) {
+  if (latest && latestAlignmentAt >= latestAssessmentAt && latestAlignmentAt >= latestFollowUpAt) {
     const pathToStatus: Record<AlignmentResult["suggestedPath"], CaseStatus> = {
       "پایش عادی": "عادی",
       "بررسی حوزه مرزی و مشاهده هدفمند فضای کلاس": "نیازمند_بررسی",
@@ -55,6 +60,17 @@ export function getEffectiveCaseStatus(
     return pathToStatus[latest.suggestedPath] || child.caseStatus;
   }
 
+  if (latestFollowUp && latestFollowUpAt >= latestAssessmentAt) {
+    switch (latestFollowUp.specialistDecision) {
+      case "پایان فالوآپ و بازگشت به پایش معمول": return "عادی";
+      case "بررسی سرمربی":
+      case "گفت‌وگو با خانواده": return "نیازمند_بررسی";
+      case "بررسی تیم تخصصی":
+      case "نیاز به اقدام سریع": return "بررسی_تخصصی";
+      default: return "فالوآپ";
+    }
+  }
+
   // A single completed form must affect the case list even while the other form is pending.
   if (latestAssessmentsByType.length > 0) {
     const levels = latestAssessmentsByType.map(assessment => assessment.score!.totalLevel);
@@ -63,13 +79,17 @@ export function getEffectiveCaseStatus(
     if (levels.every(level => level === "بهنجار")) return "عادی";
   }
 
-  return child.caseStatus;
+  // A default "عادی" value is not an assessment result. Keep unassessed
+  // children distinct until at least one scored form has been submitted.
+  if (child.caseStatus && child.caseStatus !== "عادی") return child.caseStatus;
+  return "در_حال_ارزیابی";
 }
 
 export function withEffectiveCaseStatus<T extends Child>(
   child: T,
   alignments: AlignmentResult[] = [],
-  assessments: ScoredAssessment[] = []
+  assessments: ScoredAssessment[] = [],
+  followUps: FollowUp[] = []
 ): T {
-  return { ...child, caseStatus: getEffectiveCaseStatus(child, alignments, assessments) };
+  return { ...child, caseStatus: getEffectiveCaseStatus(child, alignments, assessments, followUps) };
 }
