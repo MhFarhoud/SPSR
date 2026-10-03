@@ -5,6 +5,7 @@ import { User, TeacherAssessment, AssessmentAnswer } from "../types";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
 import { fetchData, submitTeacherForm } from "../api";
 import { calculateExactAge } from "../utils/ageCalculator";
+import { ALL_TEACHER_SCENARIOS, TEACHER_SCENARIOS, TEACHER_SCENARIO_DOMAIN_BY_ID, TeacherScenarioDomain } from "../domain/teacherScenarios";
 
 const QUESTIONS = [
   "احساسات دیگران را درک و رعایت می‌کند.",
@@ -33,27 +34,6 @@ const QUESTIONS = [
   "ترس‌های فراوانی دارد و خیلی زود وحشت می‌کند.",
   "کارهایش را تا پایان انجام می‌دهد و دقت و توجه خوبی دارد."
 ];
-
-// Simplified scenarios from PDF for brevity while strictly maintaining structure. 
-// The actual PDF has more verbose descriptions for options.
-const SCENARIOS: Record<string, { id: string; text: string; options: string[] }[]> = {
-  "احساسات": [
-    { id: "s_em_1", text: "وقتی کودک با مخالفت، تذکر معمول، نرسیدن به خواسته، اشتباه در انجام کار یا تغییر کوچکی در برنامه روبه‌رو می‌شود، معمولاً چه واکنشی نشان می‌دهد؟", options: ["ناراحت یا معترض می‌شود، اما واکنش او متناسب با اتفاق است و پس از مدت کوتاهی به فعالیت ادامه می‌دهد.", "در برابر اتفاق‌های کوچک به‌سرعت و به‌شدت ناراحت، دلخور یا گریان می‌شود؛ به‌گونه‌ای که واکنش او بیشتر از آن چیزی است که معمولاً از آن موقعیت انتظار می‌رود."] },
-    { id: "s_em_2", text: "وقتی خواسته کودک پذیرفته نمی‌شود، در بازی انتخاب نمی‌شود، وسیله‌ای از او گرفته می‌شود یا با همسال یا مربی اختلاف پیدا می‌کند، معمولاً چه می‌کند؟", options: ["ناراحتی خود را بیان می‌کند، از مربی کمک می‌خواهد یا پس از مدت کوتاهی دوباره وارد ارتباط و فعالیت می‌شود.", "از دیگران فاصله می‌گیرد، پاسخ نمی‌دهد، صحبت یا بازی را قطع می‌کند و برای مدتی حاضر نیست دوباره وارد ارتباط یا فعالیت شود."] }
-  ],
-  "رفتار": [
-    { id: "s_bh_1", text: "وقتی کودک عصبانی، ناراحت یا ناکام می‌شود، یا فعالیتی مطابق خواسته او پیش نمی‌رود، معمولاً با وسایل اطراف چه می‌کند؟", options: ["وسیله را کنار می‌گذارد، ناراحتی خود را بیان می‌کند یا با کمک مربی به فعالیت دیگری برمی‌گردد.", "وسایل را پرت می‌کند، پاره می‌کند، می‌شکند یا به‌گونه‌ای به آن‌ها آسیب می‌زند که استفاده از آن‌ها دشوار یا غیرممکن می‌شود."] },
-    { id: "s_bh_2", text: "هنگام نقاشی، بازی، انتظار یا فعالیت‌های آرام، وقتی مداد، پاک‌کن، اسباب‌بازی یا وسایل دیگر در دسترس کودک است، معمولاً چه می‌کند؟", options: ["از وسیله برای همان فعالیت استفاده می‌کند و به‌ندرت آن را به دهان می‌برد.", "وسایل غیرخوراکی را در موقعیت‌های مختلف مکرراً در دهان می‌گذارد، می‌مکد یا می‌جود و پس از یادآوری نیز دوباره این کار را تکرار می‌کند."] }
-  ],
-  "تمرکز و توجه": [
-    { id: "s_at_1", text: "وقتی مربی در جمع یا به‌صورت مستقیم یک دستور کوتاه و آشنا، مانند جمع‌کردن وسایل، نشستن روی فرش یا رفتن به صف را بیان می‌کند، کودک معمولاً چه می‌کند؟", options: ["دستور را می‌شنود و همراه دیگر کودکان یا با یک یادآوری کوتاه شروع به انجام آن می‌کند.", "معمولاً فعالیت قبلی را ادامه می‌دهد، به اطراف نگاه می‌کند یا منتظر می‌ماند تا مربی همان دستور را دوباره و به‌طور مستقیم برای خودش تکرار کند."] },
-    { id: "s_at_2", text: "وقتی مربی یک دستور کوتاه دومرحله‌ای می‌دهد (مانند مداد را بگذار و نقاشی را روی میز بگذار)، کودک معمولاً چه می‌کند؟", options: ["هر دو مرحله را به‌ترتیب و بدون یادآوری دوباره انجام می‌دهد.", "یک مرحله را انجام می‌دهد، اما مرحله بعد را فراموش می‌کند، سراغ کار دیگری می‌رود یا می‌پرسد چه باید بکند."] }
-  ],
-  "تعامل با دیگران": [
-    { id: "s_pr_1", text: "وقتی دوست موردعلاقه کودک غایب است، با کودک دیگری بازی می‌کند یا در گروه دیگری قرار می‌گیرد، کودک معمولاً چه می‌کند؟", options: ["ممکن است ابتدا ناراحت شود، اما با کودکان دیگر بازی می‌کند یا با حمایت کوتاه مربی فعالیت دیگری را انتخاب می‌کند.", "از بازی و فعالیت خودداری می‌کند، مرتب سراغ همان دوست را می‌گیرد یا فقط در صورتی وارد بازی می‌شود که آن کودک کنار او باشد."] },
-    { id: "s_pr_2", text: "وقتی همسالی وسیله کودک را بدون اجازه می‌گیرد، او را از بازی کنار می‌گذارد، جایش را می‌گیرد یا به او فشار می‌آورد، کودک معمولاً چه می‌کند؟", options: ["با کلام یا حرکت مناسب اعتراض می‌کند، حق خود را درخواست می‌کند یا از مربی کمک می‌خواهد.", "بدون اعتراض کنار می‌رود، وسیله یا جای خود را واگذار می‌کند، ناراحت می‌شود اما چیزی نمی‌گوید یا بارها رفتار دیگران را تحمل می‌کند."] }
-  ]
-};
 
 export function TeacherForm({ user }: { user: User }) {
   const { id } = useParams<{ id: string }>();
@@ -132,21 +112,41 @@ export function TeacherForm({ user }: { user: User }) {
       return;
     }
 
+    const selectedDomains = overallProblem === "خیر"
+      ? []
+      : Object.keys(problemAreas) as TeacherScenarioDomain[];
+    if (overallProblem !== "خیر" && selectedDomains.length === 0) {
+      setError("لطفاً حوزه یا حوزه‌هایی را که در آن‌ها مشکل مشاهده شده انتخاب کنید.");
+      window.scrollTo(0, 0);
+      return;
+    }
+
+    const requiredScenarioIds = selectedDomains.flatMap(domain =>
+      TEACHER_SCENARIOS[domain].map(scenario => scenario.id)
+    );
+    const missingScenarioCount = requiredScenarioIds.filter(scenarioId => !scenarioAnswers[scenarioId]).length;
+    if (missingScenarioCount > 0) {
+      setError(`لطفاً به همهٔ ${requiredScenarioIds.length} سؤال مشاهدهٔ موقعیتی در حوزه‌های انتخاب‌شده پاسخ دهید. ${missingScenarioCount} سؤال باقی مانده است.`);
+      window.scrollTo(0, 0);
+      return;
+    }
+
     const formAnswers: AssessmentAnswer[] = Object.entries(answers).map(([qId, val]) => ({
       questionId: Number(qId),
       answerValue: val
     }));
 
-    const formattedProblemAreas = Object.entries(problemAreas).map(([domain, severity]) => ({ domain, severity: severity as "کمی" | "قطعا" | "خیلی" }));
+    const formattedProblemAreas = (overallProblem === "خیر" ? [] : Object.entries(problemAreas))
+      .map(([domain, severity]) => ({ domain, severity: severity as "کمی" | "قطعا" | "خیلی" }));
 
-    const formattedScenarios = Object.entries(scenarioAnswers).map(([sId, opt]) => {
-      let domain = "";
-      if (sId.startsWith("s_em")) domain = "احساسات";
-      if (sId.startsWith("s_bh")) domain = "رفتار";
-      if (sId.startsWith("s_at")) domain = "تمرکز و توجه";
-      if (sId.startsWith("s_pr")) domain = "تعامل با دیگران";
-      return { domain, scenarioId: sId, scenarioText: SCENARIOS[domain]?.find(scenario => scenario.id === sId)?.text, selectedOption: opt as string };
-    });
+    const selectedDomainSet = new Set(selectedDomains);
+    const formattedScenarios = Object.entries(scenarioAnswers)
+      .filter(([scenarioId, option]) => option && selectedDomainSet.has(TEACHER_SCENARIO_DOMAIN_BY_ID[scenarioId]))
+      .map(([scenarioId, option]) => {
+        const domain = TEACHER_SCENARIO_DOMAIN_BY_ID[scenarioId];
+        const scenario = ALL_TEACHER_SCENARIOS.find(item => item.id === scenarioId);
+        return { domain, scenarioId, scenarioText: scenario?.text, selectedOption: option as string };
+      });
 
     const form: TeacherAssessment = {
       id: editingAssessment?.id || uuidv4(),
@@ -336,20 +336,20 @@ export function TeacherForm({ user }: { user: User }) {
               بر اساس حوزه‌هایی که مشخص کردید مشکل وجود دارد، لطفاً سناریوهای زیر را پاسخ دهید. نیازی به نمره‌گذاری نیست.
             </div>
             
-            {Object.keys(problemAreas).map(domain => {
-              const scenarios = SCENARIOS[domain];
-              if (!scenarios) return null;
-              
+            {Object.keys(problemAreas).map(domainName => {
+              const domain = domainName as TeacherScenarioDomain;
+              const scenarios = TEACHER_SCENARIOS[domain];
+
               return (
                 <div key={domain} className="space-y-4">
-                  <h4 className="font-bold text-lg text-gray-800 bg-gray-100 p-2 rounded">حوزه: {domain}</h4>
-                  {scenarios.map(sc => (
+                  <h4 className="font-bold text-lg text-gray-800 bg-gray-100 p-2 rounded">حوزه: {domain} <span className="text-sm font-normal text-gray-500">({scenarios.length} سؤال)</span></h4>
+                  {scenarios.map((sc, index) => (
                     <div key={sc.id} className="bg-white border rounded-xl p-5 shadow-sm space-y-3">
-                      <p className="font-medium text-gray-900 text-sm">{sc.text}</p>
+                      <p className="font-medium text-gray-900 text-sm"><span className="ml-2 text-xs text-gray-500">سؤال {index + 1} از {scenarios.length}</span>{sc.text}</p>
                       <div className="space-y-2">
                         {sc.options.map((opt, i) => (
                           <label key={i} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer ${scenarioAnswers[sc.id] === opt ? 'bg-indigo-50 border-indigo-300' : 'hover:bg-gray-50'}`}>
-                            <input type="radio" className="mt-1" checked={scenarioAnswers[sc.id] === opt} onChange={() => setScenarioAnswers({...scenarioAnswers, [sc.id]: opt})} />
+                            <input type="radio" name={sc.id} className="mt-1" checked={scenarioAnswers[sc.id] === opt} onChange={() => setScenarioAnswers(previous => ({...previous, [sc.id]: opt}))} />
                             <span className="text-sm text-gray-700">{opt}</span>
                           </label>
                         ))}
