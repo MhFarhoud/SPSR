@@ -2,12 +2,18 @@ import express from "express";
 import { db } from "../db";
 import { v4 as uuidv4 } from "uuid";
 import type { Center, ClassGroup, ChildEnrollment } from "../../types";
+import { getSessionUser } from "../auth";
 
 export const centersRouter = express.Router();
 
 // GET all centers
 centersRouter.get("/", (req, res) => {
-  res.json({ success: true, centers: db.data.centers });
+  const viewer = getSessionUser(req);
+  if (!viewer) return res.status(401).json({ success: false, message: "برای مشاهده مراکز وارد سامانه شوید." });
+  const centers = ["سرمربی", "سوپروایزر"].includes(viewer.role)
+    ? db.data.centers.filter(center => (viewer.centerIds || []).includes(center.id))
+    : db.data.centers;
+  res.json({ success: true, centers });
 });
 
 // POST new center
@@ -36,7 +42,12 @@ centersRouter.post("/", (req, res) => {
 
 // GET all classes
 centersRouter.get("/classes", (req, res) => {
-  res.json({ success: true, classes: db.data.classes || [] });
+  const viewer = getSessionUser(req);
+  if (!viewer) return res.status(401).json({ success: false, message: "برای مشاهده کلاس‌ها وارد سامانه شوید." });
+  const classes = ["سرمربی", "سوپروایزر"].includes(viewer.role)
+    ? (db.data.classes || []).filter(group => (viewer.centerIds || []).includes(group.centerId))
+    : (db.data.classes || []);
+  res.json({ success: true, classes });
 });
 
 // POST new class
@@ -110,7 +121,12 @@ centersRouter.put("/classes/:id", (req, res) => {
 
 // GET all enrollments
 centersRouter.get("/enrollments", (req, res) => {
-  res.json({ success: true, enrollments: db.data.enrollments || [] });
+  const viewer = getSessionUser(req);
+  if (!viewer) return res.status(401).json({ success: false, message: "برای مشاهده تخصیص‌ها وارد سامانه شوید." });
+  const enrollments = ["سرمربی", "سوپروایزر"].includes(viewer.role)
+    ? (db.data.enrollments || []).filter(item => (viewer.centerIds || []).includes(item.centerId))
+    : (db.data.enrollments || []);
+  res.json({ success: true, enrollments });
 });
 
 // POST new enrollment (Assignment)

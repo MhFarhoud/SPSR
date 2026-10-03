@@ -6,6 +6,7 @@ import { childRepository } from "../repositories/ChildRepository";
 import { db } from "../db";
 import { withEffectiveCaseStatus } from "../services/ChildClassification";
 import { getSessionUser } from "../auth";
+import { canViewChildRecord } from "../access";
 import { v4 as uuidv4 } from "uuid";
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -28,8 +29,10 @@ childrenRouter.get("/", (req, res) => {
 childrenRouter.get("/:id", (req, res) => {
   const viewer = getSessionUser(req);
   if (!viewer) return res.status(401).json({ success: false, message: "برای مشاهده پرونده وارد سامانه شوید." });
-  if (viewer.role === "مربی") return res.status(403).json({ success: false, message: "مربی به جزئیات پرونده کودک دسترسی ندارد؛ برای ثبت فرم از بخش ارزیابی‌های من اقدام کنید." });
   const child = childService.getChild(req.params.id);
+  if (child && !canViewChildRecord(viewer, child)) {
+    return res.status(403).json({ success: false, message: "شما به پرونده این کودک دسترسی ندارید." });
+  }
   if (child) {
     res.json({ success: true, child: withEffectiveCaseStatus(child, db.data.alignments, [...db.data.teacherAssessments, ...db.data.parentAssessments], db.data.followUps) });
   } else {

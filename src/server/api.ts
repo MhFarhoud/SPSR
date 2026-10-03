@@ -83,7 +83,7 @@ apiRouter.post("/public/verify-parent", (req, res) => {
     return res.status(400).json({ success: false, message: "کد کودک و کد ملی الزامی است" });
   }
 
-  const child = db.data.children.find(c => c.childId === childId);
+  const child = db.data.children.find(c => c.childId === childId || c.id === childId);
   if (!child) {
     return res.status(404).json({ success: false, message: "کودک یافت نشد" });
   }
@@ -190,13 +190,23 @@ apiRouter.get("/data", (req, res) => {
   const viewer = getSessionUser(req);
   if (!viewer) return res.status(401).json({ success: false, message: "برای دریافت اطلاعات وارد سامانه شوید." });
   const isCoach = viewer?.role === "مربی";
+  const isCenterScoped = viewer.role === "سرمربی" || viewer.role === "سوپروایزر";
   const coachClasses = isCoach ? data.classes.filter(group => group.teacherId === viewer.id) : data.classes;
-  const coachClassIds = new Set(coachClasses.map(group => group.id));
-  const coachChildren = isCoach ? data.children.filter(child => child.currentClassId && coachClassIds.has(child.currentClassId)) : data.children;
+  const scopedClasses = isCenterScoped ? data.classes.filter(group => viewer.centerIds.includes(group.centerId)) : data.classes;
+  const visibleClasses = isCoach ? coachClasses : scopedClasses;
+  const visibleClassIds = new Set(visibleClasses.map(group => group.id));
+  const visibleChildren = isCoach
+    ? data.children.filter(child => child.currentClassId && visibleClassIds.has(child.currentClassId))
+    : isCenterScoped
+      ? data.children.filter(child => viewer.centerIds.includes(child.currentCenterId))
+      : data.children;
   const assessments = [...data.teacherAssessments, ...data.parentAssessments];
-  const children = coachChildren.map(child => withEffectiveCaseStatus(child, data.alignments, assessments, data.followUps));
-  const coachSafeChildren = isCoach ? coachChildren.map(child => ({
+  const visibleChildIds = new Set(visibleChildren.map(child => child.id));
+  const visibleFollowUps = data.followUps.filter(item => visibleChildIds.has(item.childId));
+  const children = visibleChildren.map(child => withEffectiveCaseStatus(child, data.alignments, assessments, data.followUps));
+  const coachSafeChildren = isCoach ? visibleChildren.map(child => ({
     id: child.id,
+    childId: child.childId,
     firstName: child.firstName,
     lastName: child.lastName,
     birthDate: child.birthDate,
@@ -204,13 +214,30 @@ apiRouter.get("/data", (req, res) => {
     currentClassId: child.currentClassId,
     currentStage: child.currentStage
   })) : children;
-  const visibleUserIds = new Set(isCoach ? [viewer.id] : data.users.map(user => user.id));
-  const visibleChildIds = new Set(coachChildren.map(child => child.id));
+  const visibleUserIds = new Set(isCoach
+    ? [viewer.id]
+    : isCenterScoped
+      ? data.users.filter(user => user.id === viewer.id || user.centerIds.some(centerId => viewer.centerIds.includes(centerId))).map(user => user.id)
+      : data.users.map(user => user.id));
+  const visibleFollowUpIds = new Set(visibleFollowUps.map(item => item.id));
   const safeData = {
     ...data,
-    centers: isCoach ? [] : data.centers,
-    classes: coachClasses,
+    centers: isCoach ? [] : isCenterScoped ? data.centers.filter(center => viewer.centerIds.includes(center.id)) : data.centers,
+    classes: visibleClasses,
     children: coachSafeChildren,
+    ...(isCenterScoped ? {
+      teacherAssessments: data.teacherAssessments.filter(form => visibleChildIds.has(form.childId)),
+      parentAssessments: data.parentAssessments.filter(form => visibleChildIds.has(form.childId)),
+      alignments: data.alignments.filter(item => visibleChildIds.has(item.childId)),
+      followUps: visibleFollowUps,
+      followUpComparisons: data.followUpComparisons.filter(item => visibleFollowUpIds.has(item.followUpId)),
+      referralDecisions: data.referralDecisions.filter(item => visibleChildIds.has(item.childId)),
+      enrollments: data.enrollments.filter(item => visibleChildIds.has(item.childId)),
+      actionItems: data.actionItems.filter(item => visibleChildIds.has(item.childId)),
+      auditLogs: [],
+      formVersions: [],
+      permissions: {}
+    } : {}),
     ...(isCoach ? {
       teacherAssessments: data.teacherAssessments
         .filter(assessment => assessment.teacherId === viewer.id && visibleChildIds.has(assessment.childId))

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Users, Briefcase, ArrowLeft } from "lucide-react";
+import { Users, Briefcase, ArrowLeft, Link2 } from "lucide-react";
 import { fetchData } from "../../api";
 import type { User, AppData } from "../../types";
 
@@ -21,6 +21,20 @@ export function TeacherDashboard({ user }: { user: User }) {
   const myClassIds = myClasses.map(c => c.id);
   const myChildren = data.children.filter(c => c.currentClassId && myClassIds.includes(c.currentClassId));
   const myActions = data.actionItems.filter(a => a.responsiblePersonId === user.id && a.status !== "انجام_شده");
+
+  const copyParentLink = async (childId?: string) => {
+    if (!childId) {
+      window.alert("شناسه پیگیری کودک ثبت نشده است.");
+      return;
+    }
+    const link = `${window.location.origin}/p/${encodeURIComponent(childId)}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      window.alert("لینک فرم والد کپی شد.");
+    } catch {
+      window.prompt("لینک فرم والد را کپی کنید:", link);
+    }
+  };
 
   const cards = [
     { label: "تعداد کودکان من", value: myChildren.length, icon: Users, color: "bg-blue-500", link: "/assessments/mine" },
@@ -92,18 +106,24 @@ export function TeacherDashboard({ user }: { user: User }) {
             <Link to="/assessments/mine" className="text-sm text-indigo-600 hover:text-indigo-800">مشاهده فرم‌های من</Link>
           </div>
           <div className="space-y-2 max-h-80 overflow-y-auto">
-            {myChildren.slice(0, 10).map(child => {
+            {myChildren.map(child => {
               const hasAction = myActions.some(a => a.childId === child.id);
               return (
-                <Link key={child.id} to={`/child/${child.id}/form`} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
+                <div key={child.id} className="flex items-center justify-between gap-3 p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
                   <div>
                     <p className="text-sm font-medium text-gray-900">{child.firstName} {child.lastName}</p>
                     <p className="text-xs text-gray-500">{child.currentStage}</p>
                   </div>
-                  <div className="flex gap-1">
+                  <div className="flex shrink-0 items-center gap-2">
                     {hasAction && <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">اقدام</span>}
+                    <button type="button" onClick={() => void copyParentLink(child.childId || child.id)} className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 px-2.5 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-50">
+                      <Link2 className="h-3.5 w-3.5" /> لینک والد
+                    </button>
+                    <Link to={`/child/${child.id}/form`} className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-indigo-700">
+                      تکمیل فرم
+                    </Link>
                   </div>
-                </Link>
+                </div>
               );
             })}
           </div>

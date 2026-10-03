@@ -6,6 +6,7 @@ import { compareFollowUp, suggestFollowUpPath } from "../followUpEngine";
 import { FOLLOW_UP_SCALES, followUpScaleLevel, scoreFollowUpScale } from "../../followUpScales";
 import { v4 as uuidv4 } from "uuid";
 import { getSessionUser } from "../auth";
+import { canViewChildRecord } from "../access";
 
 export const assessmentsRouter = express.Router();
 
@@ -268,6 +269,9 @@ assessmentsRouter.get("/child/:childId", (req, res) => {
   if (!viewer) return res.status(401).json({ success: false, message: "برای مشاهده نتیجه وارد سامانه شوید." });
   if (viewer.role === "مربی") return res.status(403).json({ success: false, message: "مربی فقط مجاز به تکمیل فرم ارزیابی است و به نتایج دسترسی ندارد." });
   const { childId } = req.params;
+  const child = db.data.children.find(item => item.id === childId);
+  if (!child) return res.status(404).json({ success: false, message: "پرونده کودک پیدا نشد." });
+  if (!canViewChildRecord(viewer, child)) return res.status(403).json({ success: false, message: "شما به اطلاعات این کودک دسترسی ندارید." });
   
   const teacherAssessments = db.data.teacherAssessments
     .filter(a => a.childId === childId)
@@ -317,14 +321,14 @@ assessmentsRouter.get("/child/:childId/timeline", (req, res) => {
   if (!viewer) return res.status(401).json({ success: false, message: "برای مشاهده نتیجه وارد سامانه شوید." });
   if (viewer.role === "مربی") return res.status(403).json({ success: false, message: "مربی به تاریخچه و وضعیت ارزیابی دسترسی ندارد." });
   const { childId } = req.params;
+  const child = db.data.children.find(item => item.id === childId);
+  if (!child) return res.status(404).json({ success: false, message: "پرونده کودک پیدا نشد." });
+  if (!canViewChildRecord(viewer, child)) return res.status(403).json({ success: false, message: "شما به اطلاعات این کودک دسترسی ندارید." });
   
   const events: Array<{ date: string; type: string; title: string; details?: string }> = [];
 
   // Child creation
-  const child = db.data.children.find(c => c.id === childId);
-  if (child) {
-    events.push({ date: child.createdAt, type: "child", title: "ثبت پرونده کودک" });
-  }
+  events.push({ date: child.createdAt, type: "child", title: "ثبت پرونده کودک" });
 
   // Teacher assessments
   db.data.teacherAssessments.filter(a => a.childId === childId).forEach(a => {

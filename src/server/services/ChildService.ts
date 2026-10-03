@@ -53,7 +53,7 @@ export class ChildService {
     if (userId) {
       const user = userRepository.findById(userId);
       if (user) {
-        if (user.role === "سرمربی") {
+        if (user.role === "سرمربی" || user.role === "سوپروایزر") {
           allowedCenterIds = user.centerIds;
         } else if (user.role === "مربی") {
           const userClasses = db.data.classes?.filter(c => c.teacherId === user.id) || [];

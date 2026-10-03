@@ -109,7 +109,7 @@ export function ChildrenList({ user }: { user?: User }) {
       <button 
         onClick={async (e) => {
           e.stopPropagation();
-          const link = `${window.location.origin}/p/${row.childId}`;
+          const link = `${window.location.origin}/p/${encodeURIComponent(row.childId || row.id)}`;
           if (await copyText(link)) alert("لینک والد کپی شد");
           else window.prompt("کپی خودکار در این مرورگر ممکن نیست؛ لینک را کپی کنید:", link);
         }}
