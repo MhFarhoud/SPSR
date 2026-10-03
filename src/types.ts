@@ -352,6 +352,7 @@ export interface FollowUp {
   id: string;
   childId: string;
   teacherId: string;
+  actionItemId?: string;
   formType: "FOLLOWUP";
   formVersion: string;
   followUpNumber: number;

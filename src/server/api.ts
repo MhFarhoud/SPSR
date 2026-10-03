@@ -195,8 +195,10 @@ apiRouter.get("/data", (req, res) => {
   const scopedClasses = isCenterScoped ? data.classes.filter(group => viewer.centerIds.includes(group.centerId)) : data.classes;
   const visibleClasses = isCoach ? coachClasses : scopedClasses;
   const visibleClassIds = new Set(visibleClasses.map(group => group.id));
+  const coachActionItems = isCoach ? data.actionItems.filter(item => item.responsiblePersonId === viewer.id) : [];
+  const coachTaskChildIds = new Set(coachActionItems.filter(item => item.status !== "انجام_شده").map(item => item.childId));
   const visibleChildren = isCoach
-    ? data.children.filter(child => child.currentClassId && visibleClassIds.has(child.currentClassId))
+    ? data.children.filter(child => (child.currentClassId && visibleClassIds.has(child.currentClassId)) || coachTaskChildIds.has(child.id))
     : isCenterScoped
       ? data.children.filter(child => viewer.centerIds.includes(child.currentCenterId))
       : data.children;
@@ -211,6 +213,7 @@ apiRouter.get("/data", (req, res) => {
     lastName: child.lastName,
     birthDate: child.birthDate,
     gender: child.gender,
+    currentCenterId: child.currentCenterId,
     currentClassId: child.currentClassId,
     currentStage: child.currentStage
   })) : children;
@@ -222,7 +225,9 @@ apiRouter.get("/data", (req, res) => {
   const visibleFollowUpIds = new Set(visibleFollowUps.map(item => item.id));
   const safeData = {
     ...data,
-    centers: isCoach ? [] : isCenterScoped ? data.centers.filter(center => viewer.centerIds.includes(center.id)) : data.centers,
+    centers: isCoach
+      ? data.centers.filter(center => visibleChildren.some(child => child.currentCenterId === center.id))
+      : isCenterScoped ? data.centers.filter(center => viewer.centerIds.includes(center.id)) : data.centers,
     classes: visibleClasses,
     children: coachSafeChildren,
     ...(isCenterScoped ? {
@@ -251,7 +256,7 @@ apiRouter.get("/data", (req, res) => {
       followUpComparisons: [],
       referralDecisions: [],
       enrollments: [],
-      actionItems: data.actionItems.filter(action => action.responsiblePersonId === viewer.id),
+      actionItems: coachActionItems,
       auditLogs: [],
       formVersions: [],
       permissions: {}

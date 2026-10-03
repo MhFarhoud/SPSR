@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 import { User, FollowUp, Child, AppData } from "../types";
 import { CheckCircle2, ArrowRight } from "lucide-react";
@@ -14,6 +14,8 @@ const SERVICE_STATUSES: NonNullable<FollowUp["specialistServicesDone"]>[number][
 export function FollowUpForm({ user }: { user: User }) {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestedActionId = searchParams.get("actionItemId") || "";
 
   const [child, setChild] = useState<Child | null>(null);
   const [appData, setAppData] = useState<AppData | null>(null);
@@ -43,13 +45,42 @@ export function FollowUpForm({ user }: { user: User }) {
   const [requiresImmediateReport, setRequiresImmediateReport] = useState(false);
   const [freeTextNotes, setFreeTextNotes] = useState("");
   const [specialistDecision, setSpecialistDecision] = useState<FollowUp["specialistDecision"]>();
+  const [assignedActionId, setAssignedActionId] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
+    setLoading(true);
+    setLoadError("");
     fetchData().then(data => {
       setAppData(data);
       const c = data.children.find(ch => ch.id === id);
-      if (c) setChild(c);
-      
+      if (!c) {
+        setLoadError("این کودک در محدوده دسترسی حساب شما نیست یا وظیفهٔ معتبری برای او ثبت نشده است.");
+        return;
+      }
+      setChild(c);
+
+      if (user.role === "مربی") {
+        const action = data.actionItems.find(item => item.id === requestedActionId && item.childId === id && item.responsiblePersonId === user.id && item.status !== "انجام_شده");
+        if (!action || !/فالو[\s‌-]*آپ|پیگیر/.test(action.action)) {
+          setLoadError("برای ثبت فالوآپ باید یک وظیفهٔ فعال فالوآپ برای این کودک به حساب شما ارجاع شده باشد.");
+          return;
+        }
+        setAssignedActionId(action.id);
+        const assignedDomain = action.targetDomain;
+        const targetedScales = assignedDomain
+          ? FOLLOW_UP_SCALES.filter(scale => scale.key === assignedDomain || scale.domain === assignedDomain || scale.label === assignedDomain)
+          : FOLLOW_UP_SCALES;
+        if (targetedScales.length === 0) {
+          setLoadError("حوزهٔ تعیین‌شده برای این وظیفه در فهرست حوزه‌های فرم فالوآپ وجود ندارد.");
+          return;
+        }
+        setAvailableTargetDomains(targetedScales.map(scale => scale.domain));
+        setTriggerReason("تصمیم سرمربی یا تیم تخصصی");
+        return;
+      }
+
       const assessments = [
         ...data.teacherAssessments.filter(form => form.childId === id).map(form => ({ ...form, sourceType: "TPCS" as const })),
         ...data.parentAssessments.filter(form => form.childId === id).map(form => ({ ...form, sourceType: "PPCS" as const }))
@@ -65,8 +96,10 @@ export function FollowUpForm({ user }: { user: User }) {
       } else {
         setAvailableTargetDomains([]);
       }
-    });
-  }, [id]);
+    }).catch(() => {
+      setLoadError("بارگذاری اطلاعات این وظیفه ناموفق بود. لطفاً دوباره تلاش کنید.");
+    }).finally(() => setLoading(false));
+  }, [id, requestedActionId, user.id, user.role]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,6 +124,7 @@ export function FollowUpForm({ user }: { user: User }) {
       id: uuidv4(),
       childId: id!,
       teacherId: user.id,
+      actionItemId: assignedActionId || undefined,
       formType: "FOLLOWUP",
       formVersion: "1.0.0",
       triggerReason,
@@ -132,13 +166,14 @@ export function FollowUpForm({ user }: { user: User }) {
       });
       if (!res.ok) throw new Error("Failed");
       alert("فرم فالوآپ با موفقیت ثبت شد.");
-      navigate(`/child/${id}`);
+      navigate(user.role === "مربی" ? "/" : `/child/${id}`);
     } catch (err) {
       alert("خطا در ثبت فرم");
     }
   };
 
-  if (!child) return <div className="p-8 text-center text-gray-500">در حال بارگذاری...</div>;
+  if (loading) return <div className="p-8 text-center text-gray-500">در حال بارگذاری اطلاعات وظیفه...</div>;
+  if (loadError || !child) return <div className="mx-auto max-w-xl rounded-xl border border-amber-200 bg-amber-50 p-6 text-center text-amber-900"><p>{loadError || "پرونده کودک پیدا نشد."}</p><button type="button" onClick={() => navigate(-1)} className="mt-4 rounded-lg bg-indigo-600 px-4 py-2 text-white">بازگشت</button></div>;
   const childClass = appData?.classes?.find(group => group.id === child.currentClassId);
   const childTeacher = appData?.users.find(item => item.id === childClass?.teacherId);
   const initialAssessment = [...(appData?.teacherAssessments || []), ...(appData?.parentAssessments || [])].find(form => form.id === previousAssessmentId);
@@ -164,12 +199,16 @@ export function FollowUpForm({ user }: { user: User }) {
         <div className="bg-white border rounded-xl p-6 space-y-6">
           <h3 className="text-lg font-bold text-indigo-900 border-b pb-2">اطلاعات پایه و هدف فالوآپ</h3>
           <p className="text-sm text-gray-500">توجه: در این فرم تنها میزان تغییرات در رفتارهای هدف را گزارش می‌کنید و نیازی به ارزیابی کامل مجدد نیست.</p>
-          <div className="grid grid-cols-2 gap-3 rounded-lg bg-gray-50 p-4 text-sm md:grid-cols-4">
-            <p>تاریخ ارزیابی اولیه: {initialAssessment ? new Date(initialAssessment.createdAt).toLocaleDateString("fa-IR") : "ثبت نشده"}</p>
-            <p>شروع فالوآپ: {new Date().toLocaleDateString("fa-IR")}</p>
-            <p>تکمیل فرم: هنگام ثبت</p>
-            <p>نوبت فالوآپ: {followUpNumber}</p>
-          </div>
+          {user.role === "مربی" ? (
+            <p className="rounded-lg bg-indigo-50 p-4 text-sm text-indigo-900">نتیجهٔ ارزیابی برای مربی نمایش داده نمی‌شود؛ مبنای مقایسه پس از ثبت فرم در سامانه تعیین می‌شود.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 rounded-lg bg-gray-50 p-4 text-sm md:grid-cols-4">
+              <p>تاریخ ارزیابی اولیه: {initialAssessment ? new Date(initialAssessment.createdAt).toLocaleDateString("fa-IR") : "ثبت نشده"}</p>
+              <p>شروع فالوآپ: {new Date().toLocaleDateString("fa-IR")}</p>
+              <p>تکمیل فرم: هنگام ثبت</p>
+              <p>نوبت فالوآپ: {followUpNumber}</p>
+            </div>
+          )}
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>

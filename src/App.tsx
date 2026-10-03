@@ -7,7 +7,7 @@ import { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Layout } from "./components/Layout";
 import { Login } from "./pages/Login";
-import { Dashboard } from "./pages/Dashboard";
+import { Dashboard } from "./pages/Dashboard/index";
 import { ChildrenList } from "./pages/ChildrenList";
 import { ChildRegistration } from "./pages/ChildrenList/ChildRegistration";
 import { ImportExcel } from "./pages/ChildrenList/ImportExcel";
@@ -102,6 +102,7 @@ export default function App() {
               {user.role !== "مربی" && <Route path="/children/import" element={<ImportExcel user={user} />} />}
               {user.role !== "مربی" && <Route path="/child/:id" element={<ChildProfile user={user} />} />}
               <Route path="/child/:id/form" element={<TeacherForm user={user} />} />
+              {user.role === "مربی" && <Route path="/child/:id/followup/new" element={<FollowUpForm user={user} />} />}
               {user.role !== "مربی" && <Route path="/child/:id/parent-form" element={<ParentForm user={user} />} />}
               {user.role !== "مربی" && <Route path="/child/:id/followup/new" element={<FollowUpForm user={user} />} />}
               {user.role !== "مربی" && <Route path="/children/*" element={<ChildrenList user={user} />} />}

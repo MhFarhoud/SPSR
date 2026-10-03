@@ -5,7 +5,7 @@ import { Shield, Plus, KeyRound, Users, Lock, Settings, FileText, Eye } from "lu
 import { Tabs, Tab } from "../components/ui/Tabs";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Layout } from "../components/Layout";
-import { Dashboard } from "./Dashboard";
+import { Dashboard } from "./Dashboard/index";
 
 export function AdminPanel() {
   const location = useLocation();
@@ -77,6 +77,7 @@ export function AdminPanel() {
   const [permissionsSaving, setPermissionsSaving] = useState(false);
   const [permissionsMessage, setPermissionsMessage] = useState("");
   const [showCoachPreview, setShowCoachPreview] = useState(false);
+  const previewCoach = users.find(item => item.role === "مربی") || { id: "preview-coach", fullName: "پیش‌نمایش مربی", phone: "", role: "مربی" as const, centerIds: [] };
 
   const handleTogglePermission = (role: string, moduleId: string, action: string) => {
     if (role === "مربی" && moduleId === "assessment_results") return;
@@ -439,8 +440,8 @@ export function AdminPanel() {
               <span className="text-sm font-medium text-amber-900">پیش‌نمایش پنل مربی (نمایشی)</span>
               <button onClick={() => setShowCoachPreview(false)} className="rounded-lg bg-white border px-4 py-2 text-sm">بازگشت به تنظیمات</button>
             </div>
-            <Layout user={{ id: "preview-coach", fullName: "پیش‌نمایش مربی", phone: "", role: "مربی", centerIds: [] }} onLogout={() => setShowCoachPreview(false)}>
-              <Dashboard user={{ id: "preview-coach", fullName: "پیش‌نمایش مربی", phone: "", role: "مربی", centerIds: [] }} />
+            <Layout user={previewCoach} onLogout={() => setShowCoachPreview(false)}>
+              <Dashboard user={previewCoach} />
             </Layout>
           </div>
         </div>

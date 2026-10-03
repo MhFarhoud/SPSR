@@ -19,8 +19,10 @@ export function TeacherDashboard({ user }: { user: User }) {
 
   const myClasses = data.classes?.filter(c => c.teacherId === user.id) || [];
   const myClassIds = myClasses.map(c => c.id);
-  const myChildren = data.children.filter(c => c.currentClassId && myClassIds.includes(c.currentClassId));
   const myActions = data.actionItems.filter(a => a.responsiblePersonId === user.id && a.status !== "انجام_شده");
+  const assignedTaskChildIds = new Set(myActions.map(action => action.childId));
+  const myChildren = data.children.filter(c => (c.currentClassId && myClassIds.includes(c.currentClassId)) || assignedTaskChildIds.has(c.id));
+  const isFollowUpAction = (action: string) => /فالو[\s‌-]*آپ|پیگیر/.test(action);
 
   const copyParentLink = async (childId?: string) => {
     if (!childId) {
@@ -89,8 +91,8 @@ export function TeacherDashboard({ user }: { user: User }) {
                         {isOverdue && ' — عقب‌افتاده'}
                       </p>
                     </div>
-                    <Link to={`/child/${action.childId}/form`} className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
-                      تکمیل فرم <ArrowLeft className="w-3 h-3" />
+                    <Link to={isFollowUpAction(action.action) ? `/child/${action.childId}/followup/new?actionItemId=${encodeURIComponent(action.id)}` : `/child/${action.childId}/form`} className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+                      {isFollowUpAction(action.action) ? "تکمیل فالوآپ" : "تکمیل فرم"} <ArrowLeft className="w-3 h-3" />
                     </Link>
                   </div>
                 );
@@ -106,6 +108,9 @@ export function TeacherDashboard({ user }: { user: User }) {
             <Link to="/assessments/mine" className="text-sm text-indigo-600 hover:text-indigo-800">مشاهده فرم‌های من</Link>
           </div>
           <div className="space-y-2 max-h-80 overflow-y-auto">
+            {myChildren.length === 0 && (
+              <p className="py-6 text-center text-sm text-gray-500">هنوز کودکی به کلاس‌های شما تخصیص داده نشده است.</p>
+            )}
             {myChildren.map(child => {
               const hasAction = myActions.some(a => a.childId === child.id);
               return (

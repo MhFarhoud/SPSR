@@ -186,8 +186,34 @@ assessmentsRouter.post("/parent", (req, res) => {
 assessmentsRouter.post("/followup", (req, res) => {
   const submitter = getSessionUser(req);
   if (!submitter) return res.status(401).json({ success: false, message: "برای ثبت فالوآپ وارد سامانه شوید." });
-  if (submitter.role === "مربی") return res.status(403).json({ success: false, message: "این نقش فقط به فرم دیدگاه مربی دسترسی دارد." });
-  const followUp = req.body;
+  const followUp = { ...req.body };
+  let assignedFollowUpAction: (typeof db.data.actionItems)[number] | undefined;
+  if (submitter.role === "مربی") {
+    assignedFollowUpAction = db.data.actionItems.find(item => item.id === followUp.actionItemId
+      && item.childId === followUp.childId
+      && item.responsiblePersonId === submitter.id
+      && item.status !== "انجام_شده"
+      && /فالو[\s‌-]*آپ|پیگیر/.test(item.action));
+    if (!assignedFollowUpAction) {
+      return res.status(403).json({ success: false, message: "برای ثبت فالوآپ باید وظیفهٔ فعال فالوآپ این کودک به حساب شما ارجاع شده باشد." });
+    }
+    followUp.teacherId = submitter.id;
+    delete followUp.specialistDecision;
+    const assignedDomain = assignedFollowUpAction.targetDomain;
+    if (assignedDomain) {
+      const allowedDomains: string[] = FOLLOW_UP_SCALES.filter(scale => scale.key === assignedDomain || scale.domain === assignedDomain || scale.label === assignedDomain).map(scale => scale.domain);
+      if (Array.isArray(followUp.targetDomains) && followUp.targetDomains.some((domain: string) => !allowedDomains.includes(domain))) {
+        return res.status(403).json({ success: false, message: "حوزه‌های انتخاب‌شده با حوزهٔ تعیین‌شده در وظیفه مطابقت ندارد." });
+      }
+    }
+    const previousAssessment = [...db.data.teacherAssessments, ...db.data.parentAssessments]
+      .filter(item => item.childId === followUp.childId && item.score)
+      .sort((a, b) => new Date(b.submittedAt || b.updatedAt || b.createdAt).getTime() - new Date(a.submittedAt || a.updatedAt || a.createdAt).getTime())[0];
+    if (previousAssessment) {
+      followUp.previousAssessmentId = previousAssessment.id;
+      followUp.previousAssessmentType = previousAssessment.formType === "TPCS" ? "TPCS" : "PPCS";
+    }
+  }
 
   const validReasons = ["نمره مرزی یا نابهنجار در فرم مربی", "نمره مرزی یا نابهنجار در فرم والد", "اختلاف بین فرم والد و مربی", "نمره تأثیر بالا", "نگرانی ثبت‌شده مربی", "تصمیم سرمربی یا تیم تخصصی", "پیگیری پس از ارائه راهکار", "پیگیری پس از شروع خدمات تخصصی", "بروز نشانه جدید"];
   if (!validReasons.includes(followUp.triggerReason)) return res.status(400).json({ success: false, message: "دلیل شروع فالوآپ را مشخص کنید." });
@@ -258,6 +284,11 @@ assessmentsRouter.post("/followup", (req, res) => {
     timestamp: new Date().toISOString(),
     details: `Follow-up #${followUp.followUpNumber} for child ${followUp.childId}`
   });
+
+  if (assignedFollowUpAction) {
+    assignedFollowUpAction.status = "انجام_شده";
+    assignedFollowUpAction.resultNotes = "فرم فالوآپ ثبت شد.";
+  }
 
   db.persist();
   res.json({ success: true });
