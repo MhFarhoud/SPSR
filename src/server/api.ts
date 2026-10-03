@@ -14,21 +14,44 @@ import { withEffectiveCaseStatus } from "./services/ChildClassification";
 export const apiRouter = express.Router();
 
 // ── Authentication ──
+const normalizeDigits = (value: string) => value.replace(/[۰-۹٠-٩]/g, digit =>
+  String(digit.charCodeAt(0) >= 0x06f0 && digit.charCodeAt(0) <= 0x06f9
+    ? digit.charCodeAt(0) - 0x06f0
+    : digit.charCodeAt(0) - 0x0660)
+);
+
+const normalizePhone = (value: unknown) => typeof value === "string"
+  ? normalizeDigits(value).replace(/[\s()-]/g, "")
+  : "";
+
 apiRouter.post("/login", async (req, res) => {
   const { phone, password } = req.body;
-  const user = userRepository.findByPhone(phone);
+  if (typeof password !== "string" || !password) {
+    return res.status(401).json({ success: false, message: "شماره تماس یا رمز عبور اشتباه است" });
+  }
+  const user = db.data.users.find(candidate => normalizePhone(candidate.phone) === normalizePhone(phone));
   
   if (user) {
     let isMatch = false;
     
     if (user.password === "4411") {
-      isMatch = password === "4411";
+      // Older copies of the app displayed both variants as temporary passwords.
+      isMatch = password === "4411" || password === "14411";
       if (isMatch) {
         user.password = await bcrypt.hash(password, 10);
         userRepository.save(user);
       }
     } else if (user.password) {
       isMatch = await bcrypt.compare(password, user.password);
+      // Some existing data files already hashed the default password before
+      // the legacy alias was supported by the login endpoint.
+      if (!isMatch && password === "14411") {
+        isMatch = await bcrypt.compare("4411", user.password);
+        if (isMatch) {
+          user.password = await bcrypt.hash(password, 10);
+          userRepository.save(user);
+        }
+      }
     }
     
     if (isMatch) {
