@@ -169,14 +169,6 @@ export function Login({ onLogin }: { onLogin: (user: User) => void }) {
           </form>
         )}
 
-        <div className="mt-6 bg-gray-50 p-4 rounded-xl text-xs text-gray-500 space-y-2 border border-gray-200">
-          <p className="font-bold text-gray-700">راهنمای دمو:</p>
-          <ul className="list-disc list-inside space-y-1">
-            <li>مدیر سیستم: <code className="font-mono text-gray-700">09120000000</code></li>
-            <li>مربی: <code className="font-mono text-gray-700">09120000001</code></li>
-            <li>رمز عبور پیش‌فرض: <code className="font-mono text-gray-700">4411</code></li>
-          </ul>
-        </div>
       </div>
     </div>
   );
