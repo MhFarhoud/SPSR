@@ -199,13 +199,6 @@ assessmentsRouter.post("/followup", (req, res) => {
     }
     followUp.teacherId = submitter.id;
     delete followUp.specialistDecision;
-    const assignedDomain = assignedFollowUpAction.targetDomain;
-    if (assignedDomain) {
-      const allowedDomains: string[] = FOLLOW_UP_SCALES.filter(scale => scale.key === assignedDomain || scale.domain === assignedDomain || scale.label === assignedDomain).map(scale => scale.domain);
-      if (Array.isArray(followUp.targetDomains) && followUp.targetDomains.some((domain: string) => !allowedDomains.includes(domain))) {
-        return res.status(403).json({ success: false, message: "حوزه‌های انتخاب‌شده با حوزهٔ تعیین‌شده در وظیفه مطابقت ندارد." });
-      }
-    }
     const previousAssessment = [...db.data.teacherAssessments, ...db.data.parentAssessments]
       .filter(item => item.childId === followUp.childId && item.score)
       .sort((a, b) => new Date(b.submittedAt || b.updatedAt || b.createdAt).getTime() - new Date(a.submittedAt || a.updatedAt || a.createdAt).getTime())[0];

@@ -21,7 +21,6 @@ export function FollowUpForm({ user }: { user: User }) {
   const [appData, setAppData] = useState<AppData | null>(null);
   const [previousAssessmentId, setPreviousAssessmentId] = useState("");
   const [previousAssessmentType, setPreviousAssessmentType] = useState<"TPCS" | "PPCS">("TPCS");
-  const [availableTargetDomains, setAvailableTargetDomains] = useState<FollowUp["targetDomains"]>([]);
   const [targetDomains, setTargetDomains] = useState<FollowUp["targetDomains"]>([]);
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [targetBehavior, setTargetBehavior] = useState("");
@@ -69,14 +68,10 @@ export function FollowUpForm({ user }: { user: User }) {
         }
         setAssignedActionId(action.id);
         const assignedDomain = action.targetDomain;
-        const targetedScales = assignedDomain
-          ? FOLLOW_UP_SCALES.filter(scale => scale.key === assignedDomain || scale.domain === assignedDomain || scale.label === assignedDomain)
-          : FOLLOW_UP_SCALES;
-        if (targetedScales.length === 0) {
-          setLoadError("حوزهٔ تعیین‌شده برای این وظیفه در فهرست حوزه‌های فرم فالوآپ وجود ندارد.");
-          return;
-        }
-        setAvailableTargetDomains(targetedScales.map(scale => scale.domain));
+        const assignedScale = FOLLOW_UP_SCALES.find(scale => scale.key === assignedDomain || scale.domain === assignedDomain || scale.label === assignedDomain);
+        // The task can suggest an initial target, but the teacher must be able to select every applicable domain.
+        if (assignedScale) setTargetDomains([assignedScale.domain]);
+        else setTargetDomains([]);
         setTriggerReason("تصمیم سرمربی یا تیم تخصصی");
         return;
       }
@@ -92,9 +87,9 @@ export function FollowUpForm({ user }: { user: User }) {
         const needsFollowUp = baseline.score?.subscales.filter(scale => scale.level !== "بهنجار").map(scale => {
           return FOLLOW_UP_SCALES.find(item => item.key === scale.domain)?.domain;
         }).filter((domain): domain is NonNullable<typeof domain> => Boolean(domain)) || [];
-        setAvailableTargetDomains(needsFollowUp);
+        setTargetDomains(needsFollowUp);
       } else {
-        setAvailableTargetDomains([]);
+        setTargetDomains([]);
       }
     }).catch(() => {
       setLoadError("بارگذاری اطلاعات این وظیفه ناموفق بود. لطفاً دوباره تلاش کنید.");
@@ -220,13 +215,12 @@ export function FollowUpForm({ user }: { user: User }) {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">حوزه‌های هدف (همهٔ حوزه‌های نیازمند پیگیری را انتخاب کنید)</label>
               <div className="space-y-2 rounded-lg border border-gray-200 p-3">
-                {FOLLOW_UP_SCALES.filter(scale => availableTargetDomains.includes(scale.domain)).map(scale => (
+                {FOLLOW_UP_SCALES.map(scale => (
                   <label key={scale.domain} className="flex items-center gap-2 text-sm text-gray-800 cursor-pointer">
                     <input type="checkbox" checked={targetDomains.includes(scale.domain)} onChange={event => setTargetDomains(current => event.target.checked ? [...current, scale.domain] : current.filter(domain => domain !== scale.domain))} className="rounded text-indigo-600" />
                     {scale.label}
                   </label>
                 ))}
-                {availableTargetDomains.length === 0 && <p className="text-sm text-amber-700">در آخرین ارزیابی والد یا مربی، حوزه‌ای با نمره مرزی یا نابهنجار پیدا نشد؛ فرم فالوآپ گویه‌ای قابل انتخاب ندارد.</p>}
               </div>
             </div>
             <div>
