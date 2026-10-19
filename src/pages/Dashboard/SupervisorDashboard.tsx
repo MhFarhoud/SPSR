@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Users, AlertCircle, AlertTriangle, Clock, UserCheck, ArrowLeft, FileText } from "lucide-react";
 import { fetchData } from "../../api";
 import type { User, AppData } from "../../types";
+import { getActiveChildren, hasActiveFollowUp } from "../../domain/caseLifecycle";
 
 const isCompleted = (status: string) => ["SUBMITTED", "LOCKED", "ثبت_نهایی_شده"].includes(status);
 
@@ -16,23 +17,23 @@ export function SupervisorDashboard({ user }: { user: User }) {
   const centerIds = new Set(user.centerIds || []);
   const coveredClasses = (data.classes || []).filter(group => centerIds.has(group.centerId));
   const coveredClassIds = new Set(coveredClasses.map(group => group.id));
-  const coveredHeadCoaches = data.users.filter(candidate => candidate.role === "سرمربی" && coveredClasses.some(group => group.supervisorId === candidate.id));
+  const coveredHeadCoaches = data.users.filter(candidate => candidate.role === "سرمربی" && (candidate.centerIds || []).some(centerId => centerIds.has(centerId)));
   const headCoachIds = new Set(coveredHeadCoaches.map(headCoach => headCoach.id));
   const coveredCoaches = data.users.filter(candidate => candidate.role === "مربی" && coveredClasses.some(group => group.supervisorId && headCoachIds.has(group.supervisorId) && group.teacherId === candidate.id));
-  const coveredChildren = data.children.filter(child => Boolean(child.currentClassId && coveredClassIds.has(child.currentClassId)));
+  const coveredChildren = getActiveChildren(data.children.filter(child => centerIds.has(child.currentCenterId)));
   const coveredChildIds = new Set(coveredChildren.map(child => child.id));
 
   const casesNeedingReview = coveredChildren.filter(child => child.caseStatus === "نیازمند_بررسی" || child.caseStatus === "بررسی_تخصصی");
-  const followUpsNeedingDecision = data.followUps.filter(item => coveredChildIds.has(item.childId) && (item.status === "SUBMITTED" || item.status === "ثبت_نهایی_شده") && !item.specialistDecision);
-  const overdueActions = data.actionItems.filter(item => coveredChildIds.has(item.childId) && item.status !== "انجام_شده" && new Date(item.dueDate) < new Date());
-  const stagnantChildren = coveredChildren.filter(child => (Date.now() - new Date(child.updatedAt || child.createdAt).getTime()) > 7 * 24 * 60 * 60 * 1000 && child.caseStatus !== "بسته_شده" && child.caseStatus !== "عادی");
+  const followUpsNeedingDecision = coveredChildren.filter(child => hasActiveFollowUp(child.id, data.followUps, data.actionItems));
+  const overdueActions = data.actionItems.filter(item => coveredChildIds.has(item.childId) && item.status !== "انجام_شده" && item.status !== "لغوشده" && new Date(item.dueDate) < new Date());
+  const stagnantChildren = coveredChildren.filter(child => (Date.now() - new Date(child.updatedAt || child.createdAt).getTime()) > 7 * 24 * 60 * 60 * 1000 && child.caseStatus !== "عادی");
 
   const cards = [
     { label: "سرمربیان تحت پوشش", value: coveredHeadCoaches.length, icon: UserCheck, color: "bg-indigo-500" },
     { label: "کودکان تحت پوشش", value: coveredChildren.length, icon: Users, color: "bg-blue-500" },
     { label: "مربیان تحت پوشش", value: coveredCoaches.length, icon: UserCheck, color: "bg-violet-500" },
     { label: "پرونده‌های نیازمند بررسی", value: casesNeedingReview.length, icon: AlertCircle, color: "bg-red-500" },
-    { label: "فالوآپ‌های نیازمند تصمیم", value: followUpsNeedingDecision.length, icon: AlertTriangle, color: "bg-orange-500" },
+    { label: "کودکان در فالوآپ فعال", value: followUpsNeedingDecision.length, icon: AlertTriangle, color: "bg-orange-500" },
     { label: "اقدامات معوق", value: overdueActions.length, icon: Clock, color: "bg-yellow-500" }
   ];
 
@@ -108,7 +109,8 @@ export function SupervisorDashboard({ user }: { user: User }) {
           {coveredHeadCoaches.map(headCoach => {
             const headChildren = childrenForHeadCoach(headCoach.id);
             const headCoaches = coachesForHeadCoach(headCoach.id);
-            const incompleteForms = data.teacherAssessments.filter(form => headCoachIds.has(form.headCoachId) && form.headCoachId === headCoach.id && headChildren.some(child => child.id === form.childId) && !isCompleted(form.status)).length;
+            const coveredCoachIds = new Set(headCoaches.map(coach => coach.id));
+            const incompleteForms = data.teacherAssessments.filter(form => coveredCoachIds.has(form.teacherId) && headChildren.some(child => child.id === form.childId) && !isCompleted(form.status)).length;
             return (
               <section key={headCoach.id} className="rounded-xl border border-gray-200 overflow-hidden">
                 <div className="p-4 flex flex-wrap items-center justify-between gap-3 bg-gray-50">
@@ -128,7 +130,7 @@ export function SupervisorDashboard({ user }: { user: User }) {
                       const forms = data.teacherAssessments.filter(form => form.teacherId === coach.id && childIds.has(form.childId));
                       const completedForms = forms.filter(form => isCompleted(form.status)).length;
                       const incompleteCoachForms = forms.filter(form => !isCompleted(form.status)).length;
-                      const activeFollowUps = data.followUps.filter(form => form.teacherId === coach.id && childIds.has(form.childId) && !isCompleted(form.status)).length;
+                      const activeFollowUps = coachChildren.filter(child => hasActiveFollowUp(child.id, data.followUps, data.actionItems)).length;
                       const pendingCoachActions = data.actionItems.filter(action => action.responsiblePersonId === coach.id && childIds.has(action.childId) && action.status !== "انجام_شده").length;
                       return (
                         <div key={coach.id} className="p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Users, FileText, Activity, AlertTriangle, UserCheck, ArrowLeft } from "lucide-react";
+import { Users, FileText, Activity, AlertTriangle, UserCheck, ArrowLeft, Siren } from "lucide-react";
 import { fetchData } from "../../api";
 import type { User, AppData } from "../../types";
+import { getActiveChildren, hasActiveFollowUp } from "../../domain/caseLifecycle";
 
 /** PDF بخش ۳: داشبورد سرمربی
  * هدف: «کدام مربی، کودک یا اقدام تحت نظارت من نیازمند پیگیری است؟»
@@ -17,17 +18,22 @@ export function HeadCoachDashboard({ user }: { user: User }) {
   if (!data) return <div className="p-8 text-center text-gray-500">در حال بارگذاری...</div>;
 
   // Head coach sees children of their supervised coaches
-  const myCoaches = data.users.filter(u => u.role === "مربی" && u.centerIds.some(c => user.centerIds.includes(c)));
+  const supervisedClasses = (data.classes || []).filter(group => group.supervisorId === user.id && user.centerIds.includes(group.centerId));
+  const myCoaches = data.users.filter(u => u.role === "مربی" && supervisedClasses.some(group => group.teacherId === u.id));
   const coachIds = myCoaches.map(c => c.id);
-  const coveredChildren = data.children.filter(c => user.centerIds.includes(c.currentCenterId));
-  const incompleteAssessments = data.teacherAssessments.filter(a => coachIds.includes(a.teacherId) && a.status !== "SUBMITTED" && a.status !== "LOCKED" && a.status !== "ثبت_نهایی_شده");
-  const activeFollowUps = data.followUps.filter(f => coachIds.includes(f.teacherId) && f.status !== "SUBMITTED" && f.status !== "ثبت_نهایی_شده");
-  const pendingActions = data.actionItems.filter(a => coachIds.includes(a.responsiblePersonId) && a.status !== "انجام_شده");
+  const supervisedClassIds = new Set(supervisedClasses.map(group => group.id));
+  const coveredChildren = getActiveChildren(data.children.filter(c => supervisedClassIds.has(c.currentClassId || "")));
+  const coveredChildIds = new Set(coveredChildren.map(child => child.id));
+  const incompleteAssessments = data.teacherAssessments.filter(a => coveredChildIds.has(a.childId) && coachIds.includes(a.teacherId) && a.status !== "SUBMITTED" && a.status !== "LOCKED" && a.status !== "ثبت_نهایی_شده");
+  const activeFollowUps = coveredChildren.filter(child => hasActiveFollowUp(child.id, data.followUps, data.actionItems));
+  const pendingActions = data.actionItems.filter(a => coveredChildIds.has(a.childId) && coachIds.includes(a.responsiblePersonId) && a.status !== "انجام_شده" && a.status !== "لغوشده");
+  const urgentChildren = coveredChildren.filter(child => child.urgentAction?.isActive);
 
   const pendingItems = [
     ...pendingActions.map(a => ({ id: a.id, childId: a.childId, type: "اقدام: " + a.action, coachId: a.responsiblePersonId, date: a.createdAt, due: a.dueDate, status: a.status, link: `/child/${a.childId}` })),
     ...incompleteAssessments.map(a => ({ id: a.id, childId: a.childId, type: "فرم ناقص", coachId: a.teacherId, date: a.createdAt, due: a.createdAt, status: a.status, link: `/child/${a.childId}` })),
-    ...activeFollowUps.map(f => ({ id: f.id, childId: f.childId, type: "فالوآپ", coachId: f.teacherId, date: f.createdAt, due: f.createdAt, status: f.status, link: `/child/${f.childId}` }))
+    ...activeFollowUps.map(child => ({ id: `followup:${child.id}`, childId: child.id, type: "فالوآپ فعال", coachId: data.classes.find(group => group.id === child.currentClassId)?.teacherId || "", date: child.updatedAt || child.createdAt, due: child.updatedAt || child.createdAt, status: "فعال", link: `/child/${child.id}` })),
+    ...urgentChildren.map(child => ({ id: `urgent:${child.id}`, childId: child.id, type: `اقدام فوری: ${child.urgentAction?.reason || ""}`, coachId: data.classes.find(group => group.id === child.currentClassId)?.teacherId || "", date: child.urgentAction?.setAt || child.updatedAt, due: child.urgentAction?.setAt || child.updatedAt, status: "فوری", link: `/child/${child.id}` }))
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const cards = [
@@ -35,6 +41,7 @@ export function HeadCoachDashboard({ user }: { user: User }) {
     { label: "کودکان تحت پوشش", value: coveredChildren.length, icon: Users, color: "bg-blue-500" },
     { label: "فرم‌های ناقص", value: incompleteAssessments.length, icon: FileText, color: "bg-red-500" },
     { label: "فالوآپ‌های فعال", value: activeFollowUps.length, icon: Activity, color: "bg-orange-500" },
+    { label: "اقدام‌های فوری فعال", value: urgentChildren.length, icon: Siren, color: "bg-red-600" },
     { label: "اقدامات نیازمند پیگیری", value: pendingActions.length, icon: AlertTriangle, color: "bg-yellow-500" }
   ];
 
@@ -45,7 +52,7 @@ export function HeadCoachDashboard({ user }: { user: User }) {
         <p className="mt-1 text-sm text-gray-500">کدام مربی، کودک یا اقدام تحت نظارت من نیازمند پیگیری است؟</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {cards.map((card, idx) => {
           const Icon = card.icon;
           return (
@@ -92,7 +99,8 @@ export function HeadCoachDashboard({ user }: { user: User }) {
           <h3 className="text-lg font-medium text-gray-900 mb-4">وضعیت مربیان</h3>
           <div className="space-y-3 max-h-80 overflow-y-auto">
             {myCoaches.map(coach => {
-              const coachChildren = coveredChildren.filter(c => data.teacherAssessments.some(a => a.teacherId === coach.id && a.childId === c.id) || c.currentCenterId === coach.centerIds[0]);
+              const coachClassIds = new Set(supervisedClasses.filter(group => group.teacherId === coach.id).map(group => group.id));
+              const coachChildren = coveredChildren.filter(c => coachClassIds.has(c.currentClassId || ""));
               const completedForms = data.teacherAssessments.filter(a => a.teacherId === coach.id && (a.status === "SUBMITTED" || a.status === "LOCKED" || a.status === "ثبت_نهایی_شده")).length;
               const incompleteForms = data.teacherAssessments.filter(a => a.teacherId === coach.id && a.status !== "SUBMITTED" && a.status !== "LOCKED" && a.status !== "ثبت_نهایی_شده").length;
               return (

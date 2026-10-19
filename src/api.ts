@@ -120,11 +120,13 @@ export async function createClass(classGroup: Partial<ClassGroup>): Promise<void
 }
 
 export async function updateClass(id: string, classGroup: Partial<ClassGroup>): Promise<void> {
-  await fetch(`/api/centers/classes/${id}`, {
+  const res = await fetch(`/api/centers/classes/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(classGroup)
   });
+  const result = await res.json();
+  if (!res.ok || !result.success) throw new Error(result.message || "ویرایش کلاس ناموفق بود");
 }
 
 export async function createEnrollment(enrollment: Partial<ChildEnrollment>): Promise<void> {
@@ -152,9 +154,13 @@ export async function updateAction(id: string, updates: Partial<any>): Promise<v
 }
 
 export async function updateReferral(id: string, updates: Partial<any>): Promise<void> {
-  await fetch(`/api/referrals/${id}`, {
+  const response = await fetch(`/api/referrals/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(updates)
   });
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}));
+    throw new Error(result.message || "به‌روزرسانی ارجاع انجام نشد.");
+  }
 }

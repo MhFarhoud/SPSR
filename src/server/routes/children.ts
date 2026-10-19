@@ -112,6 +112,29 @@ childrenRouter.patch("/:id/archive", (req, res) => {
   res.json({ success: true, child: withEffectiveCaseStatus(child, db.data.alignments, [...db.data.teacherAssessments, ...db.data.parentAssessments], db.data.followUps) });
 });
 
+childrenRouter.patch("/:id/urgent-action", (req, res) => {
+  const actor = getSessionUser(req);
+  if (!actor) return res.status(401).json({ success: false, message: "برای ثبت وضعیت وارد سامانه شوید." });
+  if (!["ادمین", "تیم_تخصصی", "سرمربی", "سوپروایزر"].includes(actor.role)) return res.status(403).json({ success: false, message: "این نقش اجازهٔ مدیریت اقدام فوری را ندارد." });
+  const child = childRepository.findById(req.params.id);
+  if (!child) return res.status(404).json({ success: false, message: "پرونده کودک پیدا نشد." });
+  if (!canViewChildRecord(actor, child)) return res.status(403).json({ success: false, message: "به پروندهٔ این کودک دسترسی ندارید." });
+  const now = new Date().toISOString();
+  if (req.body?.isActive === true) {
+    const reason = String(req.body.reason || "").trim();
+    if (!reason) return res.status(400).json({ success: false, message: "علت اقدام فوری را وارد کنید." });
+    child.urgentAction = { isActive: true, reason, setBy: actor.id, setAt: now };
+  } else if (req.body?.isActive === false) {
+    if (!child.urgentAction?.isActive) return res.status(400).json({ success: false, message: "اقدام فوری فعالی برای این پرونده ثبت نشده است." });
+    child.urgentAction = { ...child.urgentAction, isActive: false, resolvedBy: actor.id, resolvedAt: now };
+  } else return res.status(400).json({ success: false, message: "وضعیت اقدام فوری نامعتبر است." });
+  child.updatedAt = now;
+  childRepository.save(child);
+  db.data.auditLogs.push({ id: uuidv4(), entityType: "Child", entityId: child.id, action: "STATUS_CHANGE", userId: actor.id, timestamp: now, details: child.urgentAction.isActive ? `اقدام فوری ثبت شد: ${child.urgentAction.reason}` : "اقدام فوری توسط مسئول مجاز رفع شد." });
+  db.persist();
+  res.json({ success: true, urgentAction: child.urgentAction });
+});
+
 childrenRouter.post("/", (req, res) => {
   try {
     const actor = db.data.users.find(user => user.id === req.body?.createdBy);

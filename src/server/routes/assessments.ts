@@ -182,18 +182,46 @@ assessmentsRouter.post("/parent", (req, res) => {
   res.json({ success: true, score: form.score, impact: form.impactScore });
 });
 
+assessmentsRouter.delete("/parent/:id", (req, res) => {
+  const actor = getSessionUser(req);
+  if (!actor) return res.status(401).json({ success: false, message: "برای حذف فرم وارد سامانه شوید." });
+  if (!["ادمین", "تیم_تخصصی"].includes(actor.role)) return res.status(403).json({ success: false, message: "فقط ادمین یا تیم تخصصی می‌تواند فرم والد را حذف کند." });
+  const index = db.data.parentAssessments.findIndex(form => form.id === req.params.id);
+  if (index < 0) return res.status(404).json({ success: false, message: "فرم والد پیدا نشد." });
+  const form = db.data.parentAssessments[index];
+  db.data.parentAssessments.splice(index, 1);
+  db.data.alignments = db.data.alignments.filter(alignment => alignment.parentAssessmentId !== form.id);
+  db.data.followUps.forEach(followUp => {
+    if (followUp.previousAssessmentId === form.id) {
+      followUp.previousAssessmentId = undefined;
+      followUp.previousAssessmentType = undefined;
+    }
+  });
+  db.data.auditLogs.push({ id: uuidv4(), entityType: "Assessment", entityId: form.id, action: "DELETE", userId: actor.id, timestamp: new Date().toISOString(), details: `فرم والد حذف شد (کودک ${form.childId})` });
+  db.persist();
+  res.json({ success: true });
+});
+
 // Submit Follow-Up
 assessmentsRouter.post("/followup", (req, res) => {
   const submitter = getSessionUser(req);
   if (!submitter) return res.status(401).json({ success: false, message: "برای ثبت فالوآپ وارد سامانه شوید." });
   const followUp = { ...req.body };
+  const existingIndex = db.data.followUps.findIndex(item => item.id === followUp.id);
+  const existingFollowUp = existingIndex >= 0 ? db.data.followUps[existingIndex] : undefined;
+  if (existingFollowUp) {
+    if (!["ادمین", "تیم_تخصصی", "سرمربی", "سوپروایزر"].includes(submitter.role)) return res.status(403).json({ success: false, message: "ویرایش فرم ثبت‌شده فقط برای نقش‌های مدیریتی مجاز است." });
+    const child = db.data.children.find(item => item.id === existingFollowUp.childId);
+    if (!child || !canViewChildRecord(submitter, child)) return res.status(403).json({ success: false, message: "به پروندهٔ این کودک دسترسی ندارید." });
+    if (followUp.childId !== existingFollowUp.childId) return res.status(400).json({ success: false, message: "فرم فالوآپ به پروندهٔ دیگری قابل انتقال نیست." });
+  }
   let assignedFollowUpAction: (typeof db.data.actionItems)[number] | undefined;
   if (submitter.role === "مربی") {
     assignedFollowUpAction = db.data.actionItems.find(item => item.id === followUp.actionItemId
       && item.childId === followUp.childId
       && item.responsiblePersonId === submitter.id
       && item.status !== "انجام_شده"
-      && /فالو[\s‌-]*آپ|پیگیر/.test(item.action));
+      && (item.taskType === "فرم فالوآپ" || /فالو[\s‌-]*آپ|پیگیر/.test(item.action)));
     if (!assignedFollowUpAction) {
       return res.status(403).json({ success: false, message: "برای ثبت فالوآپ باید وظیفهٔ فعال فالوآپ این کودک به حساب شما ارجاع شده باشد." });
     }
@@ -218,17 +246,19 @@ assessmentsRouter.post("/followup", (req, res) => {
   if (!Array.isArray(followUp.targetDomains) || followUp.targetDomains.length < 1) {
     return res.status(400).json({ success: false, message: "حداقل یک حوزه فالوآپ باید انتخاب شود." });
   }
-  if (followUp.targetDomains.some((domain: string) => !FOLLOW_UP_SCALES.some(scale => scale.domain === domain))) {
+  const scoredTargetDomains = followUp.targetDomains.filter((domain: string) => domain !== "مشاهده تکمیلی خارج از گویه‌های اصلی");
+  if (followUp.targetDomains.some((domain: string) => domain !== "مشاهده تکمیلی خارج از گویه‌های اصلی" && !FOLLOW_UP_SCALES.some(scale => scale.domain === domain))) {
     return res.status(400).json({ success: false, message: "حوزه انتخاب‌شده معتبر نیست." });
   }
+  if (followUp.targetDomains.includes("مشاهده تکمیلی خارج از گویه‌های اصلی") && !String(followUp.additionalObservation || "").trim()) return res.status(400).json({ success: false, message: "شرح مشاهدهٔ تکمیلی الزامی است." });
   const submittedQuestionIds = new Set((followUp.answers || []).map((answer: any) => Number(answer.questionId)));
-  const requiredQuestionIds = followUp.targetDomains.flatMap((domain: string) => FOLLOW_UP_SCALES.find(scale => scale.domain === domain)!.questions);
+  const requiredQuestionIds = scoredTargetDomains.flatMap((domain: string) => FOLLOW_UP_SCALES.find(scale => scale.domain === domain)!.questions);
   if (requiredQuestionIds.some((questionId: number) => !submittedQuestionIds.has(questionId)) ||
       (followUp.answers || []).some((answer: any) => !requiredQuestionIds.includes(Number(answer.questionId)) || ![0, 1, 2].includes(answer.answerValue)) ||
       submittedQuestionIds.size !== requiredQuestionIds.length) {
     return res.status(400).json({ success: false, message: "پاسخ هر پنج گویه حوزه انتخاب‌شده الزامی است." });
   }
-  const scoredDomains = followUp.targetDomains.map((domain: string) => {
+  const scoredDomains = scoredTargetDomains.map((domain: string) => {
     const scaleScore = scoreFollowUpScale(followUp.answers || [], domain);
     return { domain, score: scaleScore, level: followUpScaleLevel(domain, scaleScore) };
   });
@@ -238,9 +268,13 @@ assessmentsRouter.post("/followup", (req, res) => {
   followUp.submittedAt = followUp.status === "SUBMITTED" ? new Date().toISOString() : undefined;
   followUp.followUpNumber = db.data.followUps.filter(f => f.childId === followUp.childId).length + 1;
 
-  const idx = db.data.followUps.findIndex(f => f.id === followUp.id);
-  if (idx >= 0) db.data.followUps[idx] = followUp;
+  followUp.id = existingFollowUp?.id || followUp.id || uuidv4();
+  followUp.teacherId = existingFollowUp?.teacherId || followUp.teacherId || submitter.id;
+  followUp.createdAt = existingFollowUp?.createdAt || followUp.createdAt || new Date().toISOString();
+  followUp.followUpNumber = existingFollowUp?.followUpNumber || db.data.followUps.filter(f => f.childId === followUp.childId).length + 1;
+  if (existingFollowUp) db.data.followUps[existingIndex] = followUp;
   else db.data.followUps.push(followUp);
+  if (existingFollowUp) db.data.followUpComparisons = db.data.followUpComparisons.filter(item => item.followUpId !== existingFollowUp.id);
 
   // Calculate comparison if we have a previous assessment score
   if (followUp.previousAssessmentId) {
@@ -272,10 +306,10 @@ assessmentsRouter.post("/followup", (req, res) => {
     id: uuidv4(),
     entityType: "FollowUp",
     entityId: followUp.id,
-    action: followUp.status === "SUBMITTED" ? "SUBMIT" : "CREATE",
-    userId: followUp.teacherId,
+    action: existingFollowUp ? "UPDATE" : followUp.status === "SUBMITTED" ? "SUBMIT" : "CREATE",
+    userId: submitter.id,
     timestamp: new Date().toISOString(),
-    details: `Follow-up #${followUp.followUpNumber} for child ${followUp.childId}`
+    details: `${existingFollowUp ? "فرم فالوآپ ویرایش شد" : "فرم فالوآپ ثبت شد"} #${followUp.followUpNumber} (کودک ${followUp.childId})`
   });
 
   if (assignedFollowUpAction) {

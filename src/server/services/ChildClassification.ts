@@ -34,11 +34,10 @@ export function getEffectiveCaseStatus(
     : undefined;
   const latestAssessmentAt = Math.max(0, ...childAssessments.map(assessment => timestamp(assessment.submittedAt || assessment.updatedAt || assessment.createdAt)));
   const latestAlignmentAt = timestamp(latest?.createdAt);
-  const latestFollowUp = followUps
-    .filter(item => item.childId === child.id && ["SUBMITTED", "ثبت_نهایی_شده", "LOCKED"].includes(item.status))
-    .sort((a, b) => timestamp(b.submittedAt || b.createdAt) - timestamp(a.submittedAt || a.createdAt))[0];
-  const latestFollowUpAt = timestamp(latestFollowUp?.submittedAt || latestFollowUp?.createdAt);
-  const latestEvaluationAt = Math.max(latestAssessmentAt, latestAlignmentAt, latestFollowUpAt);
+  // Follow-up is a parallel workflow and must not overwrite the assessment-based
+  // case classification (a child may need review and be in follow-up at once).
+  void followUps;
+  const latestEvaluationAt = Math.max(latestAssessmentAt, latestAlignmentAt);
 
   // A manual case decision made after the latest evaluation remains authoritative.
   if (child.statusChangeDate && timestamp(child.statusChangeDate) >= latestEvaluationAt) {
@@ -46,7 +45,7 @@ export function getEffectiveCaseStatus(
   }
 
   // Prefer the joint parent/teacher decision when it reflects the latest submitted forms.
-  if (latest && latestAlignmentAt >= latestAssessmentAt && latestAlignmentAt >= latestFollowUpAt) {
+  if (latest && latestAlignmentAt >= latestAssessmentAt) {
     const pathToStatus: Record<AlignmentResult["suggestedPath"], CaseStatus> = {
       "پایش عادی": "عادی",
       "بررسی حوزه مرزی و مشاهده هدفمند فضای کلاس": "نیازمند_بررسی",
@@ -58,17 +57,6 @@ export function getEffectiveCaseStatus(
       "بررسی تخصصی و تعیین شدت ارجاع": "بررسی_تخصصی"
     };
     return pathToStatus[latest.suggestedPath] || child.caseStatus;
-  }
-
-  if (latestFollowUp && latestFollowUpAt >= latestAssessmentAt) {
-    switch (latestFollowUp.specialistDecision) {
-      case "پایان فالوآپ و بازگشت به پایش معمول": return "عادی";
-      case "بررسی سرمربی":
-      case "گفت‌وگو با خانواده": return "نیازمند_بررسی";
-      case "بررسی تیم تخصصی":
-      case "نیاز به اقدام سریع": return "بررسی_تخصصی";
-      default: return "فالوآپ";
-    }
   }
 
   // A single completed form must affect the case list even while the other form is pending.

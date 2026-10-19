@@ -18,8 +18,12 @@ centersRouter.get("/", (req, res) => {
 
 // POST new center
 centersRouter.post("/", (req, res) => {
+  const actor = getSessionUser(req);
+  if (!actor || !["ادمین", "تیم_تخصصی"].includes(actor.role)) return res.status(403).json({ success: false, message: "فقط ادمین یا تیم تخصصی می‌تواند مرکز ایجاد کند." });
+  if (!String(req.body?.name || "").trim()) return res.status(400).json({ success: false, message: "نام مرکز الزامی است." });
   const newCenter: Center = {
     ...req.body,
+    name: String(req.body.name).trim(),
     id: uuidv4(),
     isActive: true,
   };
@@ -31,7 +35,7 @@ centersRouter.post("/", (req, res) => {
     entityType: "Center",
     entityId: newCenter.id,
     action: "CREATE",
-    userId: req.body.createdBy || "system", // Passed from client ideally
+    userId: actor.id,
     timestamp: new Date().toISOString(),
     details: `Center ${newCenter.name} created`
   });
@@ -52,6 +56,8 @@ centersRouter.get("/classes", (req, res) => {
 
 // POST new class
 centersRouter.post("/classes", (req, res) => {
+  const actor = getSessionUser(req);
+  if (!actor || !["ادمین", "تیم_تخصصی"].includes(actor.role)) return res.status(403).json({ success: false, message: "فقط ادمین یا تیم تخصصی می‌تواند کلاس ایجاد کند." });
   const { name, centerId, supervisorId, teacherId } = req.body || {};
   if (!name?.trim() || !centerId || !supervisorId) {
     return res.status(400).json({ success: false, message: "نام کلاس، مرکز و سرمربی الزامی است." });
@@ -79,6 +85,7 @@ centersRouter.post("/classes", (req, res) => {
     ...req.body,
     name: name.trim(),
     teacherId: teacherId || "",
+    isActive: true,
     id: uuidv4(),
   };
   
@@ -89,7 +96,7 @@ centersRouter.post("/classes", (req, res) => {
     entityType: "System",
     entityId: newClass.id,
     action: "CREATE",
-    userId: req.body.createdBy || "system",
+    userId: actor.id,
     timestamp: new Date().toISOString(),
     details: `Class ${newClass.name} created for center ${newClass.centerId}`
   });
@@ -100,21 +107,35 @@ centersRouter.post("/classes", (req, res) => {
 
 // PUT update center
 centersRouter.put("/:id", (req, res) => {
+  const actor = getSessionUser(req);
+  if (!actor || !["ادمین", "تیم_تخصصی"].includes(actor.role)) return res.status(403).json({ success: false, message: "فقط ادمین یا تیم تخصصی می‌تواند مرکز را ویرایش کند." });
   const centerIndex = db.data.centers.findIndex(c => c.id === req.params.id);
   if (centerIndex === -1) return res.status(404).json({ success: false, message: "مرکز یافت نشد" });
 
-  db.data.centers[centerIndex] = { ...db.data.centers[centerIndex], ...req.body };
+  if (req.body?.name !== undefined && !String(req.body.name).trim()) return res.status(400).json({ success: false, message: "نام مرکز الزامی است." });
+  db.data.centers[centerIndex] = { ...db.data.centers[centerIndex], ...req.body, name: req.body?.name ? String(req.body.name).trim() : db.data.centers[centerIndex].name };
+  db.data.auditLogs.push({ id: uuidv4(), entityType: "Center", entityId: req.params.id, action: "UPDATE", userId: actor.id, timestamp: new Date().toISOString(), details: `مرکز ${db.data.centers[centerIndex].name} ویرایش شد.` });
   db.persist();
   res.json({ success: true, center: db.data.centers[centerIndex] });
 });
 
 // PUT update class
 centersRouter.put("/classes/:id", (req, res) => {
+  const actor = getSessionUser(req);
+  if (!actor || !["ادمین", "تیم_تخصصی"].includes(actor.role)) return res.status(403).json({ success: false, message: "فقط ادمین یا تیم تخصصی می‌تواند کلاس را ویرایش کند." });
   if (!db.data.classes) db.data.classes = [];
   const classIndex = db.data.classes.findIndex(c => c.id === req.params.id);
   if (classIndex === -1) return res.status(404).json({ success: false, message: "کلاس یافت نشد" });
 
-  db.data.classes[classIndex] = { ...db.data.classes[classIndex], ...req.body };
+  const current = db.data.classes[classIndex];
+  const { name, centerId, supervisorId, teacherId, isActive } = req.body || {};
+  const nextCenterId = centerId || current.centerId;
+  if (centerId && !db.data.centers.some(center => center.id === centerId)) return res.status(400).json({ success: false, message: "مرکز معتبر نیست." });
+  if (supervisorId && !db.data.users.some(person => person.id === supervisorId && person.role === "سرمربی" && (person.centerIds || []).includes(nextCenterId))) return res.status(400).json({ success: false, message: "سرمربی معتبر یا تخصیص‌یافته به این مرکز نیست." });
+  if (teacherId && !db.data.users.some(person => person.id === teacherId && person.role === "مربی" && (person.centerIds || []).includes(nextCenterId))) return res.status(400).json({ success: false, message: "مربی معتبر یا تخصیص‌یافته به این مرکز نیست." });
+  if (isActive === false && db.data.children.some(child => child.currentClassId === current.id && !child.archived && child.activeStatus !== "آرشیوشده" && child.caseStatus !== "بسته_شده" && child.caseStatus !== "بایگانی")) return res.status(409).json({ success: false, message: "تا وقتی کودک فعالی در کلاس هست، آن را غیرفعال نکنید؛ ابتدا کودکان را منتقل کنید." });
+  db.data.classes[classIndex] = { ...current, ...req.body, name: name?.trim() || current.name };
+  db.data.auditLogs.push({ id: uuidv4(), entityType: "System", entityId: current.id, action: "UPDATE", userId: actor.id, timestamp: new Date().toISOString(), details: `کلاس ${current.name} ویرایش شد.` });
   db.persist();
   res.json({ success: true, class: db.data.classes[classIndex] });
 });

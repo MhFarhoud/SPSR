@@ -16,12 +16,14 @@ export function FollowUpForm({ user }: { user: User }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const requestedActionId = searchParams.get("actionItemId") || "";
+  const requestedFollowUpId = searchParams.get("edit") || "";
 
   const [child, setChild] = useState<Child | null>(null);
   const [appData, setAppData] = useState<AppData | null>(null);
   const [previousAssessmentId, setPreviousAssessmentId] = useState("");
   const [previousAssessmentType, setPreviousAssessmentType] = useState<"TPCS" | "PPCS">("TPCS");
   const [targetDomains, setTargetDomains] = useState<FollowUp["targetDomains"]>([]);
+  const [additionalObservation, setAdditionalObservation] = useState("");
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [targetBehavior, setTargetBehavior] = useState("");
   const [triggerReason, setTriggerReason] = useState<FollowUp["triggerReason"]>("پیگیری پس از ارائه راهکار");
@@ -60,9 +62,44 @@ export function FollowUpForm({ user }: { user: User }) {
       }
       setChild(c);
 
+      if (requestedFollowUpId) {
+        const existing = data.followUps.find(item => item.id === requestedFollowUpId && item.childId === id);
+        if (!existing || !["ادمین", "تیم_تخصصی", "سرمربی", "سوپروایزر"].includes(user.role)) {
+          setLoadError("این فرم وجود ندارد یا اجازهٔ ویرایش آن را ندارید.");
+          return;
+        }
+        setTargetDomains(existing.targetDomains || []);
+        setAdditionalObservation(existing.additionalObservation || "");
+        setAnswers(Object.fromEntries((existing.answers || []).map(answer => [answer.questionId, answer.answerValue])));
+        setTargetBehavior(existing.targetBehaviors?.[0] || "");
+        setTriggerReason(existing.triggerReason);
+        setPreviousAssessmentId(existing.previousAssessmentId || "");
+        setPreviousAssessmentType(existing.previousAssessmentType || "TPCS");
+        setImplementationLevel(existing.implementationLevel);
+        setOverallChange(existing.overallChange);
+        setEffectiveness(existing.effectiveness);
+        setProblemStillExists(existing.problemStillExists || "بله، به میزان کم");
+        setChildDistress(existing.childDistress);
+        setImpactOnLearning(existing.impactOnLearning);
+        setImpactOnPeers(existing.impactOnPeers);
+        setImpactOnTeacher(existing.impactOnTeacher || "خیر");
+        setClassManagementBurden(existing.classManagementBurden || "خیر");
+        setCenterActionsDone(existing.centerActionsDone || []);
+        setSpecialistServicesDone(existing.specialistServicesDone || []);
+        setNonImplementationReason(existing.nonImplementationReason);
+        setNewBehaviorObserved(existing.newBehaviorObserved);
+        setNewBehaviorDescription(existing.newBehaviorDescription || "");
+        setNewBehaviorKeywordsText(existing.newBehaviorKeywords?.join("، ") || "");
+        setNewBehaviorDate(existing.newBehaviorDate || "");
+        setRequiresImmediateReport(Boolean(existing.requiresImmediateReport));
+        setFreeTextNotes(existing.freeTextNotes || "");
+        setSpecialistDecision(existing.specialistDecision);
+        return;
+      }
+
       if (user.role === "مربی") {
         const action = data.actionItems.find(item => item.id === requestedActionId && item.childId === id && item.responsiblePersonId === user.id && item.status !== "انجام_شده");
-        if (!action || !/فالو[\s‌-]*آپ|پیگیر/.test(action.action)) {
+        if (!action || !(action.taskType === "فرم فالوآپ" || /فالو[\s‌-]*آپ|پیگیر/.test(action.action))) {
           setLoadError("برای ثبت فالوآپ باید یک وظیفهٔ فعال فالوآپ برای این کودک به حساب شما ارجاع شده باشد.");
           return;
         }
@@ -94,12 +131,16 @@ export function FollowUpForm({ user }: { user: User }) {
     }).catch(() => {
       setLoadError("بارگذاری اطلاعات این وظیفه ناموفق بود. لطفاً دوباره تلاش کنید.");
     }).finally(() => setLoading(false));
-  }, [id, requestedActionId, user.id, user.role]);
+  }, [id, requestedActionId, requestedFollowUpId, user.id, user.role]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (targetDomains.length === 0) {
       alert("لطفاً دست‌کم یک حوزه هدف انتخاب کنید.");
+      return;
+    }
+    if (targetDomains.includes("مشاهده تکمیلی خارج از گویه‌های اصلی") && !additionalObservation.trim()) {
+      alert("لطفاً مشاهدهٔ تکمیلی را شرح دهید.");
       return;
     }
     const requiredQuestionIds: number[] = [...new Set<number>(targetDomains.flatMap((domain): number[] => {
@@ -116,7 +157,7 @@ export function FollowUpForm({ user }: { user: User }) {
     }
 
     const form: FollowUp = {
-      id: uuidv4(),
+      id: requestedFollowUpId || uuidv4(),
       childId: id!,
       teacherId: user.id,
       actionItemId: assignedActionId || undefined,
@@ -128,6 +169,7 @@ export function FollowUpForm({ user }: { user: User }) {
       followUpNumber: 1, // Simplified, should be calculated on backend
       status: "SUBMITTED",
       targetDomains: targetDomains as FollowUp["targetDomains"],
+      additionalObservation: additionalObservation.trim() || undefined,
       targetBehaviors: [targetBehavior],
       answers: requiredQuestionIds.map(questionId => ({ questionId, answerValue: answers[questionId] })),
       implementationLevel,
@@ -160,7 +202,7 @@ export function FollowUpForm({ user }: { user: User }) {
         body: JSON.stringify(form)
       });
       if (!res.ok) throw new Error("Failed");
-      alert("فرم فالوآپ با موفقیت ثبت شد.");
+      alert(requestedFollowUpId ? "تغییرات فرم فالوآپ ذخیره شد." : "فرم فالوآپ با موفقیت ثبت شد.");
       navigate(user.role === "مربی" ? "/" : `/child/${id}`);
     } catch (err) {
       alert("خطا در ثبت فرم");
@@ -221,8 +263,13 @@ export function FollowUpForm({ user }: { user: User }) {
                     {scale.label}
                   </label>
                 ))}
+                <label className="flex items-center gap-2 text-sm text-gray-800 cursor-pointer">
+                  <input type="checkbox" checked={targetDomains.includes("مشاهده تکمیلی خارج از گویه‌های اصلی")} onChange={event => setTargetDomains(current => event.target.checked ? [...current, "مشاهده تکمیلی خارج از گویه‌های اصلی"] : current.filter(domain => domain !== "مشاهده تکمیلی خارج از گویه‌های اصلی"))} className="rounded text-indigo-600" />
+                  مشاهده تکمیلی خارج از گویه‌های اصلی (بدون نمره‌گذاری)
+                </label>
               </div>
             </div>
+            {targetDomains.includes("مشاهده تکمیلی خارج از گویه‌های اصلی") && <div className="md:col-span-2"><label className="mb-1 block text-sm font-medium">شرح مشاهده تکمیلی</label><textarea value={additionalObservation} onChange={event => setAdditionalObservation(event.target.value)} className="w-full rounded-lg border p-2" rows={3} required /></div>}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">رفتار هدف (چه رفتاری را پیگیری می‌کنید؟)</label>
               <input type="text" value={targetBehavior} onChange={e => setTargetBehavior(e.target.value)} placeholder="مثال: پرخاشگری فیزیکی هنگام گرفتن اسباب‌بازی" className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:ring-indigo-500" required />

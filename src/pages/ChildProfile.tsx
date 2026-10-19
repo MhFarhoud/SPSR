@@ -69,7 +69,7 @@ export function ChildProfile({ user }: { user?: User }) {
   const canManageChild = ["ادمین", "تیم_تخصصی", "سرمربی"].includes(user?.role || "");
   const canManageTeacherForms = ["ادمین", "تیم_تخصصی", "سرمربی"].includes(user?.role || "");
   const editableCenters = centers.filter(center => user?.role !== "سرمربی" || user.centerIds.includes(center.id));
-  const editableClasses = classes.filter(group => group.centerId === editForm.centerId && (user?.role !== "سرمربی" || group.supervisorId === user.id));
+  const editableClasses = classes.filter(group => group.isActive !== false && group.centerId === editForm.centerId && (user?.role !== "سرمربی" || group.supervisorId === user.id));
   const openEdit = () => {
     setEditForm({ firstName: child.firstName, lastName: child.lastName, nationalId: child.nationalId || "", birthDate: child.birthDate, gender: child.gender, parentName: child.parentName || "", parentContactPhone: child.parentContactPhone, centerId: child.currentCenterId, classId: child.currentClassId || "", stage: child.currentStage });
     setEditError("");
@@ -125,6 +125,28 @@ export function ChildProfile({ user }: { user?: User }) {
     setTeacherForms(data.teacherAssessments?.filter(item => item.childId === id) || []);
   };
 
+  const deleteParentForm = async (form: ParentAssessment) => {
+    if (!window.confirm(`فرم والد ثبت‌شده در ${new Date(form.createdAt).toLocaleDateString("fa-IR")} حذف شود؟ نتیجهٔ همسویی متصل نیز حذف خواهد شد.`)) return;
+    const response = await fetch(`/api/assessments/parent/${encodeURIComponent(form.id)}`, { method: "DELETE" });
+    const result = await response.json();
+    if (!response.ok || !result.success) { window.alert(result.message || "حذف فرم انجام نشد."); return; }
+    const data = await fetchData();
+    setParentForms(data.parentAssessments?.filter(item => item.childId === id) || []);
+    setAlignments(data.alignments?.filter(item => item.childId === id) || []);
+  };
+
+  const toggleUrgentAction = async () => {
+    const isActive = Boolean(child.urgentAction?.isActive);
+    const reason = isActive ? undefined : window.prompt("علت اقدام فوری را وارد کنید:")?.trim();
+    if (!isActive && !reason) return;
+    const response = await fetch(`/api/children/${encodeURIComponent(child.id)}/urgent-action`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isActive: !isActive, reason }) });
+    const result = await response.json();
+    if (!response.ok || !result.success) { window.alert(result.message || "تغییر وضعیت انجام نشد."); return; }
+    setChild({ ...child, urgentAction: result.urgentAction });
+    const refreshed = await fetchData();
+    setTimeline(refreshed.auditLogs?.filter(item => item.entityId === id) || []);
+  };
+
   const getStatusBadge = (status?: string) => {
     switch(status) {
       case "عادی": return <Badge variant="success">عادی</Badge>;
@@ -166,7 +188,9 @@ export function ChildProfile({ user }: { user?: User }) {
               <div className="flex gap-2">
                 {getPriorityBadge(child.priority)}
                 {getStatusBadge(child.caseStatus)}
+                {child.urgentAction?.isActive && <Badge variant="danger">اقدام فوری فعال</Badge>}
               </div>
+              {canManageChild && <button type="button" onClick={() => void toggleUrgentAction()} className={`rounded-lg px-3 py-1.5 text-sm ${child.urgentAction?.isActive ? "bg-red-100 text-red-700" : "bg-amber-50 text-amber-800"}`}>{child.urgentAction?.isActive ? "رفع اقدام فوری" : "ثبت اقدام فوری"}</button>}
             </div>
           )}
           <div className="flex items-center gap-2">
@@ -365,6 +389,28 @@ export function ChildProfile({ user }: { user?: User }) {
                         {form.score && (
                           <AssessmentScoreSummary score={form.score} />
                         )}
+                        <details className="mt-3 rounded-lg border border-emerald-100 bg-emerald-50/40 p-3">
+                          <summary className="cursor-pointer text-sm font-medium text-emerald-900">مشاهدهٔ کامل پاسخ‌ها و اطلاعات والد</summary>
+                          <div className="mt-3 grid gap-2 text-sm text-gray-700 sm:grid-cols-2">
+                            <p>پاسخ‌دهنده: {form.respondentName || "ثبت نشده"} ({form.relationToChild})</p>
+                            <p>تلفن: {form.respondentPhone || "ثبت نشده"}</p>
+                            <p>سن کودک هنگام ارزیابی: {form.childAgeAtAssessment}</p>
+                            <p>مشکل کلی: {form.overallProblem}</p>
+                            <p>مدت مشکل: {form.durationOfProblem || "ثبت نشده"}</p>
+                            <p>پریشانی کودک: {form.childDistressLevel || "ثبت نشده"}</p>
+                            <p>اثر بر زندگی خانواده: {form.impactOnFamilyLife || "ثبت نشده"}</p>
+                            <p>اثر بر دوستی‌ها: {form.impactOnFriendships || "ثبت نشده"}</p>
+                            <p>اثر بر یادگیری: {form.impactOnLearning || "ثبت نشده"}</p>
+                            <p>اثر بر اوقات فراغت: {form.impactOnLeisure || "ثبت نشده"}</p>
+                            <p>فشار بر خانواده: {form.burdenOnFamily || "ثبت نشده"}</p>
+                            <p className="sm:col-span-2">حوزه‌ها: {form.problemAreas?.length ? form.problemAreas.map(area => `${area.domain} (${area.severity})`).join("، ") : "ثبت نشده"}</p>
+                            <p className="sm:col-span-2">تغییرات مهم: {form.importantChanges?.join("، ") || "ثبت نشده"}</p>
+                            <p className="sm:col-span-2">خدمات دریافت‌شده: {form.servicesUsed?.join("، ") || "ثبت نشده"}</p>
+                            {form.freeTextNotes && <p className="sm:col-span-2 whitespace-pre-wrap">یادداشت: {form.freeTextNotes}</p>}
+                          </div>
+                          <div className="mt-4 space-y-1 text-sm"><p className="font-semibold">پاسخ گویه‌ها</p>{[...form.answers].sort((a,b) => a.questionId-b.questionId).map(answer => <p key={answer.questionId}>گویهٔ {answer.questionId}: {answer.answerValue === 2 ? "کاملاً درست" : answer.answerValue === 1 ? "تا حدی درست" : "درست نیست"}</p>)}</div>
+                        </details>
+                        {user?.role === "ادمین" || user?.role === "تیم_تخصصی" ? <div className="mt-3 flex justify-end border-t pt-3"><button type="button" onClick={() => void deleteParentForm(form)} className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"><Trash2 className="h-4 w-4" /> حذف فرم</button></div> : null}
                       </div>
                     ))
                   )}
@@ -465,7 +511,7 @@ export function ChildProfile({ user }: { user?: User }) {
                         <div>
                           <span className="text-indigo-600 font-bold text-sm bg-indigo-50 px-2 py-1 rounded">فالوآپ #{followUps.length - idx}</span>
                           <h4 className="font-bold text-gray-900 mt-2">رفتار هدف: {fu.targetBehaviors[0]}</h4>
-                          <span className="text-sm text-gray-500">حوزه: {fu.targetDomains[0]} | ثبت: {new Date(fu.createdAt).toLocaleDateString('fa-IR')}</span>
+                          <span className="text-sm text-gray-500">حوزه‌ها: {fu.targetDomains.join("، ")} | ثبت: {new Date(fu.createdAt).toLocaleDateString('fa-IR')}</span>
                         </div>
                         <Badge variant="success">ثبت نهایی</Badge>
                       </div>
@@ -499,6 +545,8 @@ export function ChildProfile({ user }: { user?: User }) {
                           ))}
                         </div>
                       )}
+                      {fu.additionalObservation && <p className="mt-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-900"><strong>مشاهدهٔ تکمیلی:</strong> {fu.additionalObservation}</p>}
+                      {canManageChild && <div className="mt-3 flex justify-end border-t pt-3"><button type="button" onClick={() => navigate(`/child/${child.id}/followup/new?edit=${encodeURIComponent(fu.id)}`)} className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 px-3 py-1.5 text-sm text-indigo-700 hover:bg-indigo-50"><Pencil className="h-4 w-4" /> ویرایش فرم فالوآپ</button></div>}
                     </div>
                   ))}
                 </div>

@@ -22,7 +22,7 @@ export function ChildRegistration({ user }: { user: User }) {
 
   useEffect(() => { fetchData().then(setData); }, []);
   const availableCenters = (data?.centers || []).filter(center => user.role !== "سرمربی" || user.centerIds.includes(center.id));
-  const availableClasses = (data?.classes || []).filter(group => group.centerId === formData.currentCenterId && (user.role !== "سرمربی" || group.supervisorId === user.id));
+  const availableClasses = (data?.classes || []).filter(group => group.isActive !== false && group.centerId === formData.currentCenterId && (user.role !== "سرمربی" || group.supervisorId === user.id));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

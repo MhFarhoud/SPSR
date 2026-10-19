@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Users, Briefcase, ArrowLeft, Link2 } from "lucide-react";
-import { fetchData } from "../../api";
+import { fetchData, updateAction } from "../../api";
 import type { User, AppData } from "../../types";
+import { getActiveChildren } from "../../domain/caseLifecycle";
 
 /** PDF بخش ۲: داشبورد مربی
  * هدف: «چه کارهایی مربوط به کودکان من است و امروز باید چه کاری انجام دهم؟»
@@ -19,10 +20,21 @@ export function TeacherDashboard({ user }: { user: User }) {
 
   const myClasses = data.classes?.filter(c => c.teacherId === user.id) || [];
   const myClassIds = myClasses.map(c => c.id);
-  const myActions = data.actionItems.filter(a => a.responsiblePersonId === user.id && a.status !== "انجام_شده");
+  const activeChildren = getActiveChildren(data.children);
+  const activeChildIds = new Set(activeChildren.map(child => child.id));
+  const myActions = data.actionItems.filter(a => a.responsiblePersonId === user.id && activeChildIds.has(a.childId) && a.status !== "انجام_شده" && a.status !== "لغوشده");
   const assignedTaskChildIds = new Set(myActions.map(action => action.childId));
-  const myChildren = data.children.filter(c => (c.currentClassId && myClassIds.includes(c.currentClassId)) || assignedTaskChildIds.has(c.id));
-  const isFollowUpAction = (action: string) => /فالو[\s‌-]*آپ|پیگیر/.test(action);
+  const myChildren = activeChildren.filter(c => (c.currentClassId && myClassIds.includes(c.currentClassId)) || assignedTaskChildIds.has(c.id));
+  const taskType = (action: (typeof myActions)[number]) => action.taskType || (/فالو[\s‌-]*آپ|پیگیر/.test(action.action) ? "فرم فالوآپ" : /فرم|ارزیاب/.test(action.action) ? "فرم ارزیابی" : "اقدام اجرایی");
+  const startTask = async (actionId: string) => {
+    await updateAction(actionId, { status: "در_حال_انجام", startedAt: new Date().toISOString() });
+    setData(await fetchData());
+  };
+  const finishTask = async (actionId: string) => {
+    const resultNotes = window.prompt("نتیجه کوتاه اقدام (اختیاری):") || "";
+    await updateAction(actionId, { status: "انجام_شده", resultNotes, completedAt: new Date().toISOString() });
+    setData(await fetchData());
+  };
 
   const copyParentLink = async (childId?: string) => {
     if (!childId) {
@@ -91,9 +103,9 @@ export function TeacherDashboard({ user }: { user: User }) {
                         {isOverdue && ' — عقب‌افتاده'}
                       </p>
                     </div>
-                    <Link to={isFollowUpAction(action.action) ? `/child/${action.childId}/followup/new?actionItemId=${encodeURIComponent(action.id)}` : `/child/${action.childId}/form`} className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
-                      {isFollowUpAction(action.action) ? "تکمیل فالوآپ" : "تکمیل فرم"} <ArrowLeft className="w-3 h-3" />
-                    </Link>
+                    {taskType(action) === "فرم فالوآپ" ? <Link to={`/child/${action.childId}/followup/new?actionItemId=${encodeURIComponent(action.id)}`} className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1">تکمیل فرم فالوآپ <ArrowLeft className="w-3 h-3" /></Link>
+                      : taskType(action) === "فرم ارزیابی" ? <Link to={`/child/${action.childId}/form`} className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1">تکمیل فرم ارزیابی <ArrowLeft className="w-3 h-3" /></Link>
+                      : <div className="flex flex-col items-end gap-1">{action.status === "شروع_نشده" && <button type="button" onClick={() => void startTask(action.id)} className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-700">شروع اقدام</button>}{action.status === "در_حال_انجام" && <button type="button" onClick={() => void finishTask(action.id)} className="rounded bg-emerald-50 px-2 py-1 text-xs text-emerald-700">ثبت نتیجه و پایان</button>}</div>}
                   </div>
                 );
               })}

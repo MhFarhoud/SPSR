@@ -3,8 +3,9 @@ import { fetchData } from "../../api";
 import type { User, AppData, Child, TeacherAssessment, ParentAssessment, AlignmentResult } from "../../types";
 import { PieChart, BarChart2, Activity, Users, ShieldAlert, TrendingUp } from "lucide-react";
 import { Tabs, Tab } from "../../components/ui/Tabs";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Badge } from "../../components/ui/Badge";
+import { getActiveChildren, hasActiveFollowUp, isArchivedOrClosedChild } from "../../domain/caseLifecycle";
 
 export function ReportsModule({ user }: { user: User }) {
   const location = useLocation();
@@ -45,17 +46,19 @@ export function ReportsModule({ user }: { user: User }) {
   if (loading || !data) return <div className="p-8 text-center text-gray-500">در حال پردازش داده‌های تحلیلی...</div>;
 
   // Global Analytics computations
-  const totalChildren = data.children.length;
-  const boysCount = data.children.filter(c => c.gender === "پسر").length;
-  const girlsCount = data.children.filter(c => c.gender === "دختر").length;
+  const activeChildren = getActiveChildren(data.children);
+  const totalChildren = activeChildren.length;
+  const boysCount = activeChildren.filter(c => c.gender === "پسر").length;
+  const girlsCount = activeChildren.filter(c => c.gender === "دختر").length;
   
-  const tpcsCount = data.teacherAssessments.length;
-  const ppcsCount = data.parentAssessments.length;
-  const alignmentCount = data.alignments.length;
+  const activeChildIds = new Set(activeChildren.map(child => child.id));
+  const tpcsCount = data.teacherAssessments.filter(form => activeChildIds.has(form.childId)).length;
+  const ppcsCount = data.parentAssessments.filter(form => activeChildIds.has(form.childId)).length;
+  const alignmentCount = data.alignments.filter(alignment => activeChildIds.has(alignment.childId)).length;
   
-  const activeCasesCount = data.children.filter(c => !c.archived && c.caseStatus !== "بسته_شده").length;
-  const interventionCount = data.children.filter(c => c.caseStatus === "مداخله").length;
-  const followupCount = data.children.filter(c => c.caseStatus === "فالوآپ").length;
+  const activeCasesCount = totalChildren;
+  const interventionCount = activeChildren.filter(c => c.caseStatus === "مداخله" || data.actionItems.some(action => action.childId === c.id && action.taskType === "اجرای راهکار" && action.status !== "انجام_شده" && action.status !== "لغوشده")).length;
+  const followupCount = activeChildren.filter(child => hasActiveFollowUp(child.id, data.followUps, data.actionItems)).length;
 
   return (
     <div className="space-y-6 pb-20">
@@ -135,7 +138,7 @@ export function ReportsModule({ user }: { user: User }) {
                 <h4 className="text-gray-500 font-medium mb-4">توزیع مقاطع آموزشی</h4>
                 <div className="space-y-4">
                   {["مهد", "پیش‌دبستانی۱", "پیش‌دبستانی۲"].map(stage => {
-                    const count = data.children.filter(c => c.currentStage === stage).length;
+                    const count = activeChildren.filter(c => c.currentStage === stage).length;
                     const percentage = totalChildren > 0 ? Math.round((count/totalChildren)*100) : 0;
                     return (
                       <div key={stage}>
@@ -207,23 +210,39 @@ export function ReportsModule({ user }: { user: User }) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {data.centers.map(center => {
                 const centerChildren = data.children.filter(c => c.currentCenterId === center.id);
-                const centerInterventions = centerChildren.filter(c => c.caseStatus === "مداخله" || c.caseStatus === "نیازمند_بررسی");
+                const activeCenterChildren = getActiveChildren(centerChildren);
+                const archivedCount = centerChildren.filter(isArchivedOrClosedChild).length;
+                const centerReview = activeCenterChildren.filter(c => c.caseStatus === "نیازمند_بررسی" || c.caseStatus === "بررسی_تخصصی");
+                const centerInterventions = activeCenterChildren.filter(c => c.caseStatus === "مداخله" || data.actionItems.some(action => action.childId === c.id && action.taskType === "اجرای راهکار" && action.status !== "انجام_شده" && action.status !== "لغوشده"));
+                const centerFollowups = activeCenterChildren.filter(child => hasActiveFollowUp(child.id, data.followUps, data.actionItems));
                 return (
                   <div key={center.id} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
                     <h4 className="font-bold text-gray-900 mb-4">{center.name}</h4>
                     <div className="space-y-3 text-sm">
                       <div className="flex justify-between border-b border-gray-50 pb-2">
-                        <span className="text-gray-500">تعداد کل کودکان:</span>
-                        <span className="font-bold">{centerChildren.length} نفر</span>
+                        <span className="text-gray-500">کودکان فعال:</span>
+                        <Link to="/children" className="font-bold text-indigo-700 hover:underline">{activeCenterChildren.length} نفر</Link>
                       </div>
                       <div className="flex justify-between border-b border-gray-50 pb-2">
-                        <span className="text-gray-500">کودکان نیازمند توجه ویژه:</span>
-                        <span className="font-bold text-danger-600">{centerInterventions.length} نفر</span>
+                        <span className="text-gray-500">نیازمند بررسی / توجه تخصصی:</span>
+                        <Link to="/cases/review" className="font-bold text-danger-600 hover:underline">{centerReview.length} نفر</Link>
+                      </div>
+                      <div className="flex justify-between border-b border-gray-50 pb-2">
+                        <span className="text-gray-500">در مداخله:</span>
+                        <Link to="/cases/intervention" className="font-bold text-amber-600 hover:underline">{centerInterventions.length} نفر</Link>
+                      </div>
+                      <div className="flex justify-between border-b border-gray-50 pb-2">
+                        <span className="text-gray-500">دارای فالوآپ فعال:</span>
+                        <Link to="/cases/followup" className="font-bold text-teal-700 hover:underline">{centerFollowups.length} نفر</Link>
+                      </div>
+                      <div className="flex justify-between border-b border-gray-50 pb-2">
+                        <span className="text-gray-500">بسته / بایگانی:</span>
+                        <Link to="/children/archive" className="font-bold text-gray-600 hover:underline">{archivedCount} نفر</Link>
                       </div>
                       <div className="flex justify-between border-b border-gray-50 pb-2">
                         <span className="text-gray-500">نسبت نیاز به مداخله:</span>
                         <span className="font-medium">
-                          {centerChildren.length > 0 ? Math.round((centerInterventions.length/centerChildren.length)*100) : 0}%
+                          {activeCenterChildren.length > 0 ? Math.round((centerInterventions.length/activeCenterChildren.length)*100) : 0}%
                         </span>
                       </div>
                     </div>

@@ -2,6 +2,7 @@ import express from "express";
 import { childRepository } from "../repositories/ChildRepository";
 import { db } from "../db";
 import { getSessionUser } from "../auth";
+import { getActiveChildren, hasActiveFollowUp } from "../../domain/caseLifecycle";
 
 export const dashboardRouter = express.Router();
 
@@ -13,16 +14,17 @@ dashboardRouter.get("/stats", (req, res) => {
   const children = ["سرمربی", "سوپروایزر"].includes(viewer.role)
     ? allChildren.filter(child => (viewer.centerIds || []).includes(child.currentCenterId))
     : allChildren;
-  const childIds = new Set(children.map(child => child.id));
+  const activeChildrenList = getActiveChildren(children);
+  const childIds = new Set(activeChildrenList.map(child => child.id));
   
-  const totalChildren = children.length;
-  const activeChildren = children.filter(c => c.caseStatus !== "بسته_شده" && c.caseStatus !== "بایگانی").length;
+  const totalChildren = activeChildrenList.length;
+  const activeChildren = activeChildrenList.length;
   
   const tAssessments = db.data.teacherAssessments.filter(form => childIds.has(form.childId)).length;
   const pAssessments = db.data.parentAssessments.filter(form => childIds.has(form.childId)).length;
 
   const totalFollowUps = db.data.followUps.filter(form => childIds.has(form.childId)).length;
-  const activeFollowUps = db.data.followUps.filter(f => childIds.has(f.childId) && f.status !== "SUBMITTED" && f.status !== "LOCKED").length;
+  const activeFollowUps = activeChildrenList.filter(child => hasActiveFollowUp(child.id, db.data.followUps, db.data.actionItems)).length;
 
   res.json({
     success: true,

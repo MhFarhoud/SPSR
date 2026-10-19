@@ -10,6 +10,7 @@ import { assessmentsRouter } from "./routes/assessments";
 import { db } from "./db";
 import { clearSession, createSession, getSessionUser, setSessionCookie } from "./auth";
 import { withEffectiveCaseStatus } from "./services/ChildClassification";
+import { canViewChildRecord } from "./access";
 
 export const apiRouter = express.Router();
 
@@ -155,6 +156,41 @@ apiRouter.put("/users/:id/password", async (req, res) => {
   }
 });
 
+apiRouter.put("/referrals/:id", (req, res) => {
+  const actor = getSessionUser(req);
+  if (!actor) return res.status(401).json({ success: false, message: "برای ویرایش ارجاع وارد سامانه شوید." });
+  const referral = db.data.referralDecisions.find(item => item.id === req.params.id);
+  if (!referral) return res.status(404).json({ success: false, message: "ارجاع پیدا نشد." });
+  const child = db.data.children.find(item => item.id === referral.childId);
+  if (!child) return res.status(404).json({ success: false, message: "پروندهٔ کودک پیدا نشد." });
+  const allowed = ["ادمین", "تیم_تخصصی", "سوپروایزر"].includes(actor.role)
+    || (actor.role === "درمانگر" && referral.therapistId === actor.id);
+  if (!allowed || !canViewChildRecord(actor, child)) return res.status(403).json({ success: false, message: "به‌روزرسانی این ارجاع برای حساب شما مجاز نیست." });
+  const updates = req.body || {};
+  const now = new Date().toISOString();
+  if (updates.progressReports !== undefined) {
+    if (!Array.isArray(updates.progressReports)) return res.status(400).json({ success: false, message: "فهرست گزارش‌ها نامعتبر است." });
+    const priorIds = new Set((referral.progressReports || []).map(report => report.id));
+    const appended = updates.progressReports.filter((report: any) => !priorIds.has(report.id));
+    if (appended.length > 1 || updates.progressReports.length !== (referral.progressReports || []).length + appended.length) return res.status(400).json({ success: false, message: "گزارش‌های قبلی قابل حذف یا جایگزینی نیستند." });
+    for (const report of appended) {
+      if (report.referralId !== referral.id || !report.reportDate || !report.reportType) return res.status(400).json({ success: false, message: "نوع و تاریخ گزارش الزامی است." });
+      report.createdById = actor.id;
+      report.createdByRole = actor.role;
+      report.createdAt = now;
+    }
+    referral.progressReports = [...(referral.progressReports || []), ...appended];
+  }
+  if (updates.status !== undefined) {
+    if (!allowed || typeof updates.status !== "string") return res.status(403).json({ success: false, message: "تغییر وضعیت ارجاع مجاز نیست." });
+    referral.status = updates.status;
+  }
+  referral.lastUpdateDate = now;
+  db.data.auditLogs.push({ id: uuidv4(), entityType: "Referral", entityId: referral.id, action: updates.progressReports ? "SUBMIT" : "STATUS_CHANGE", userId: actor.id, timestamp: now, details: updates.progressReports ? `گزارش درمان (${updates.progressReports.at(-1)?.reportType || ""}) ثبت شد.` : `وضعیت ارجاع به ${referral.status} تغییر کرد.` });
+  db.persist();
+  res.json({ success: true, referral });
+});
+
 // ── Mount Module Routers ──
 apiRouter.use("/children", childrenRouter);
 apiRouter.use("/dashboard", dashboardRouter);
@@ -190,15 +226,18 @@ apiRouter.get("/data", (req, res) => {
   const viewer = getSessionUser(req);
   if (!viewer) return res.status(401).json({ success: false, message: "برای دریافت اطلاعات وارد سامانه شوید." });
   const isCoach = viewer?.role === "مربی";
-  const isCenterScoped = viewer.role === "سرمربی" || viewer.role === "سوپروایزر";
+  const isHeadCoach = viewer.role === "سرمربی";
+  const isCenterScoped = viewer.role === "سوپروایزر";
   const coachClasses = isCoach ? data.classes.filter(group => group.teacherId === viewer.id) : data.classes;
-  const scopedClasses = isCenterScoped ? data.classes.filter(group => viewer.centerIds.includes(group.centerId)) : data.classes;
+  const scopedClasses = isHeadCoach ? data.classes.filter(group => group.supervisorId === viewer.id && viewer.centerIds.includes(group.centerId)) : isCenterScoped ? data.classes.filter(group => viewer.centerIds.includes(group.centerId)) : data.classes;
   const visibleClasses = isCoach ? coachClasses : scopedClasses;
   const visibleClassIds = new Set(visibleClasses.map(group => group.id));
   const coachActionItems = isCoach ? data.actionItems.filter(item => item.responsiblePersonId === viewer.id) : [];
   const coachTaskChildIds = new Set(coachActionItems.filter(item => item.status !== "انجام_شده").map(item => item.childId));
   const visibleChildren = isCoach
     ? data.children.filter(child => (child.currentClassId && visibleClassIds.has(child.currentClassId)) || coachTaskChildIds.has(child.id))
+    : isHeadCoach
+      ? data.children.filter(child => child.currentClassId && visibleClassIds.has(child.currentClassId))
     : isCenterScoped
       ? data.children.filter(child => viewer.centerIds.includes(child.currentCenterId))
       : data.children;
@@ -219,6 +258,8 @@ apiRouter.get("/data", (req, res) => {
   })) : children;
   const visibleUserIds = new Set(isCoach
     ? [viewer.id]
+    : isHeadCoach
+      ? data.users.filter(user => user.id === viewer.id || visibleClasses.some(group => group.teacherId === user.id)).map(user => user.id)
     : isCenterScoped
       ? data.users.filter(user => user.id === viewer.id || user.centerIds.some(centerId => viewer.centerIds.includes(centerId))).map(user => user.id)
       : data.users.map(user => user.id));
@@ -227,10 +268,10 @@ apiRouter.get("/data", (req, res) => {
     ...data,
     centers: isCoach
       ? data.centers.filter(center => visibleChildren.some(child => child.currentCenterId === center.id))
-      : isCenterScoped ? data.centers.filter(center => viewer.centerIds.includes(center.id)) : data.centers,
+      : isCenterScoped ? data.centers.filter(center => viewer.centerIds.includes(center.id)) : isHeadCoach ? data.centers.filter(center => visibleClasses.some(group => group.centerId === center.id)) : data.centers,
     classes: visibleClasses,
     children: coachSafeChildren,
-    ...(isCenterScoped ? {
+    ...(isCenterScoped || isHeadCoach ? {
       teacherAssessments: data.teacherAssessments.filter(form => visibleChildIds.has(form.childId)),
       parentAssessments: data.parentAssessments.filter(form => visibleChildIds.has(form.childId)),
       alignments: data.alignments.filter(item => visibleChildIds.has(item.childId)),

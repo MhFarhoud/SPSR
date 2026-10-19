@@ -34,6 +34,7 @@ export interface ClassGroup {
   startDate: string;
   endDate?: string;
   capacity?: number;
+  isActive?: boolean;
 }
 
 // Child and Enrollment
@@ -72,6 +73,14 @@ export interface Child {
   statusChangeReason?: string;
   statusChangeDate?: string;
   archived?: boolean;
+  urgentAction?: {
+    isActive: boolean;
+    reason: string;
+    setBy: string;
+    setAt: string;
+    resolvedBy?: string;
+    resolvedAt?: string;
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -345,6 +354,9 @@ export interface TherapistReport {
   isNew?: boolean; // Badge for new report
   viewedByProject?: boolean;
   createdAt: string;
+  reportType?: "دوره‌ای" | "پایان خدمت" | "قطع خدمت";
+  createdById?: string;
+  createdByRole?: Role;
 }
 
 // Follow-up
@@ -363,6 +375,7 @@ export interface FollowUp {
   previousAssessmentType?: "TPCS" | "PPCS";
   
   targetDomains: ("نشانگان هیجانی" | "مشکلات سلوک" | "بیش‌فعالی و کمبود توجه" | "مشکلات با همتایان" | "رفتارهای جامعه‌پسند" | "مشاهده تکمیلی خارج از گویه‌های اصلی")[];
+  additionalObservation?: string;
   targetBehaviors: string[];
   
   answers: AssessmentAnswer[];
@@ -427,9 +440,14 @@ export interface ActionItem {
   action: string;
   responsiblePersonId: string;
   targetDomain?: string;
+  creatorId?: string;
+  taskType?: "فرم ارزیابی" | "فرم فالوآپ" | "اجرای راهکار" | "اقدام اجرایی" | "پایش رفتار" | "مشاهده مشخص";
+  caseStage?: string;
   dueDate: string;
   status: "شروع_نشده" | "در_حال_انجام" | "انجام_شده" | "متوقف_شده" | "لغوشده" | "نیازمند_بازبینی";
   resultNotes?: string;
+  startedAt?: string;
+  completedAt?: string;
   nextFollowUpDate?: string;
   createdAt: string;
 }

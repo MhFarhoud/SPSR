@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Building, Users, AlertCircle, Plus, ChevronDown, ChevronLeft } from "lucide-react";
-import { fetchData, createCenter, updateCenter, createClass } from "../../api";
+import { fetchData, createCenter, updateCenter, createClass, updateClass } from "../../api";
 import { User, AppData, Center, ClassGroup } from "../../types";
 import { useNavigate } from "react-router-dom";
 
@@ -29,6 +29,7 @@ export function CentersModule({ user }: { user: User }) {
   const [editingCenter, setEditingCenter] = useState<Partial<Center> | null>(null);
   const [newClassData, setNewClassData] = useState<Partial<ClassGroup>>({ name: "", centerId: "", supervisorId: "", teacherId: "" });
   const [classFormError, setClassFormError] = useState("");
+  const [editingClassId, setEditingClassId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData().then(setData);
@@ -61,8 +62,10 @@ export function CentersModule({ user }: { user: User }) {
     }
     setClassFormError("");
     try {
-      await createClass(newClassData);
+      if (editingClassId) await updateClass(editingClassId, newClassData);
+      else await createClass(newClassData);
       setClassModalOpen(false);
+      setEditingClassId(null);
       refreshData();
     } catch (e) {
       setClassFormError(e instanceof Error ? e.message : "خطا در ایجاد کلاس");
@@ -163,7 +166,8 @@ export function CentersModule({ user }: { user: User }) {
                                   >
                                     {clsIsExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronLeft className="w-4 h-4 text-gray-400" />}
                                     <span className="text-sm text-gray-700">مربی: {teacher?.fullName || 'نامشخص'} (کلاس: {cls.name})</span>
-                                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full mr-2">{classChildren.length} کودک</span>
+                                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full mr-2">{classChildren.length} کودک{cls.isActive === false ? " · غیرفعال" : ""}</span>
+                                    {isAdminOrSpec && <span className="mr-auto flex gap-1"><button type="button" onClick={event => { event.stopPropagation(); setEditingClassId(cls.id); setNewClassData({ name: cls.name, centerId: cls.centerId, supervisorId: cls.supervisorId, teacherId: cls.teacherId || "", isActive: cls.isActive !== false }); setClassFormError(""); setClassModalOpen(true); }} className="rounded bg-indigo-50 px-2 py-1 text-xs text-indigo-700">ویرایش</button><button type="button" onClick={async event => { event.stopPropagation(); const active = cls.isActive !== false; if (!window.confirm(active ? "کلاس غیرفعال شود؟" : "کلاس دوباره فعال شود؟")) return; try { await updateClass(cls.id, { isActive: !active }); await refreshData(); } catch (error) { window.alert(error instanceof Error ? error.message : "تغییر وضعیت کلاس انجام نشد."); } }} className={`rounded px-2 py-1 text-xs ${cls.isActive === false ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-800"}`}>{cls.isActive === false ? "فعال‌سازی" : "غیرفعال‌سازی"}</button></span>}
                                   </div>
                                   
                                   {clsIsExpanded && (
@@ -256,7 +260,7 @@ export function CentersModule({ user }: { user: User }) {
       {isClassModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-lg max-w-md w-full p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">افزودن کلاس جدید</h3>
+            <h3 className="text-lg font-bold text-gray-900 mb-4">{editingClassId ? "ویرایش کلاس" : "افزودن کلاس جدید"}</h3>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">نام کلاس *</label>
@@ -303,7 +307,7 @@ export function CentersModule({ user }: { user: User }) {
             </div>
             {classFormError && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{classFormError}</p>}
             <div className="mt-6 flex justify-end gap-3">
-              <button onClick={() => setClassModalOpen(false)} className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">انصراف</button>
+              <button onClick={() => { setClassModalOpen(false); setEditingClassId(null); }} className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">انصراف</button>
               <button onClick={handleSaveClass} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">ذخیره</button>
             </div>
           </div>

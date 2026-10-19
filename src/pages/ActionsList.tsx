@@ -19,6 +19,7 @@ export function ActionsList({ user }: { user: User }) {
 
   // New action form state
   const [newActionText, setNewActionText] = useState("");
+  const [newTaskType, setNewTaskType] = useState<NonNullable<ActionItem["taskType"]>>("اقدام اجرایی");
   const [selectedChildId, setSelectedChildId] = useState("");
   const [assignedUserId, setAssignedUserId] = useState(user.id);
   const [dueDate, setDueDate] = useState("");
@@ -54,14 +55,17 @@ export function ActionsList({ user }: { user: User }) {
       responsiblePersonId: assignedUserId,
       dueDate: dueDate,
       status: "شروع_نشده",
+      taskType: newTaskType,
       creatorId: user.id
     });
+    setNewActionText("");
     setShowCreateModal(false);
     loadData();
   };
 
   const handleStatusChange = async (actionId: string, newStatus: string) => {
-    await updateAction(actionId, { status: newStatus });
+    const now = new Date().toISOString();
+    await updateAction(actionId, { status: newStatus, ...(newStatus === "در_حال_انجام" ? { startedAt: now } : {}), ...(newStatus === "انجام_شده" ? { completedAt: now } : {}) });
     loadData();
   };
 
@@ -78,8 +82,8 @@ export function ActionsList({ user }: { user: User }) {
 
   const now = new Date();
   
-  const myTasks = allowedActions.filter(a => a.responsiblePersonId === user.id && a.status !== "انجام_شده");
-  const overdueTasks = allowedActions.filter(a => a.status !== "انجام_شده" && new Date(a.dueDate) < now);
+  const myTasks = allowedActions.filter(a => a.responsiblePersonId === user.id && a.status !== "انجام_شده" && a.status !== "لغوشده");
+  const overdueTasks = allowedActions.filter(a => a.status !== "انجام_شده" && a.status !== "لغوشده" && new Date(a.dueDate) < now);
   const completedTasks = allowedActions.filter(a => a.status === "انجام_شده");
   const allTasks = allowedActions;
 
@@ -129,11 +133,11 @@ export function ActionsList({ user }: { user: User }) {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-4 text-right font-medium text-gray-500">کودک مربوطه</th>
-                <th className="px-6 py-4 text-right font-medium text-gray-500">شرح اقدام</th>
+                <th className="px-6 py-4 text-right font-medium text-gray-500">نوع و شرح اقدام</th>
                 <th className="px-6 py-4 text-right font-medium text-gray-500">مسئول انجام</th>
                 <th className="px-6 py-4 text-right font-medium text-gray-500">سررسید (Due Date)</th>
                 <th className="px-6 py-4 text-right font-medium text-gray-500">وضعیت</th>
-                <th className="px-6 py-4 text-right font-medium text-gray-500">عملیات</th>
+                <th className="px-6 py-4 text-right font-medium text-gray-500">مرحله و عملیات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -145,9 +149,9 @@ export function ActionsList({ user }: { user: User }) {
                 return (
                   <tr key={task.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 font-bold text-gray-900">
-                      {child ? <Link to={`/cases/${child.id}`} className="text-indigo-600 hover:underline">{child.firstName} {child.lastName}</Link> : "نامشخص"}
+                      {child ? <Link to={`/child/${child.id}`} className="text-indigo-600 hover:underline">{child.firstName} {child.lastName}<span className="mt-1 block font-mono text-xs font-normal text-gray-500">{child.childId || child.id}</span></Link> : "نامشخص"}
                     </td>
-                    <td className="px-6 py-4 text-gray-700 w-1/3">{task.action}</td>
+                    <td className="px-6 py-4 text-gray-700 w-1/3"><span className="mb-1 inline-flex rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700">{task.taskType || (/فالو[\s‌-]*آپ|پیگیر/.test(task.action) ? "فرم فالوآپ" : "اقدام اجرایی")}</span><p>{task.action}</p>{task.resultNotes && <p className="mt-1 text-xs text-gray-500">نتیجه: {task.resultNotes}</p>}</td>
                     <td className="px-6 py-4 text-gray-700">
                       <div className="flex items-center gap-2">
                         <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-600">
@@ -165,6 +169,8 @@ export function ActionsList({ user }: { user: User }) {
                       {task.status === "شروع_نشده" && <Badge variant="warning">شروع نشده</Badge>}
                       {task.status === "در_حال_انجام" && <Badge variant="info">در حال انجام</Badge>}
                       {task.status === "انجام_شده" && <Badge variant="success">تکمیل شده</Badge>}
+                      {task.startedAt && <span className="mt-1 block text-xs text-gray-500">شروع: {new Date(task.startedAt).toLocaleDateString("fa-IR")}</span>}
+                      {task.completedAt && <span className="mt-1 block text-xs text-gray-500">پایان: {new Date(task.completedAt).toLocaleDateString("fa-IR")}</span>}
                     </td>
                     <td className="px-6 py-4">
                       {task.status !== "انجام_شده" && task.responsiblePersonId === user.id && (
@@ -172,7 +178,8 @@ export function ActionsList({ user }: { user: User }) {
                           {task.status === "شروع_نشده" && (
                             <button onClick={() => handleStatusChange(task.id, "در_حال_انجام")} className="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded hover:bg-blue-100 font-medium">شروع کار</button>
                           )}
-                          <button onClick={() => handleStatusChange(task.id, "انجام_شده")} className="text-xs bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded hover:bg-emerald-100 font-medium">پایان کار (تیک)</button>
+                          {(!task.taskType || !["فرم ارزیابی", "فرم فالوآپ"].includes(task.taskType)) && <input aria-label="نتیجه کوتاه اقدام" placeholder="نتیجه کوتاه (اختیاری)" defaultValue={task.resultNotes || ""} onBlur={event => { if (event.target.value !== (task.resultNotes || "")) void updateAction(task.id, { resultNotes: event.target.value }).then(loadData); }} className="w-40 rounded border px-2 py-1 text-xs" />}
+                          <button onClick={() => handleStatusChange(task.id, "انجام_شده")} className="text-xs bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded hover:bg-emerald-100 font-medium">پایان کار</button>
                         </div>
                       )}
                     </td>
@@ -196,7 +203,7 @@ export function ActionsList({ user }: { user: User }) {
                 <label className="block text-sm font-medium text-gray-700 mb-1">مرتبط با کودک (پرونده)</label>
                 <select required value={selectedChildId} onChange={e => setSelectedChildId(e.target.value)} className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-emerald-500">
                   <option value="">-- انتخاب کنید --</option>
-                  {data.children.map(c => (
+                  {data.children.filter(c => !c.archived && c.activeStatus !== "آرشیوشده").map(c => (
                     <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>
                   ))}
                 </select>
@@ -205,9 +212,16 @@ export function ActionsList({ user }: { user: User }) {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">مسئول انجام وظیفه (ارجاع به)</label>
                 <select required value={assignedUserId} onChange={e => setAssignedUserId(e.target.value)} className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-emerald-500">
-                  {data.users.map(u => (
+                  {data.users.filter(u => ["مربی", "سرمربی", "سوپروایزر", "تیم_تخصصی", "درمانگر"].includes(u.role)).map(u => (
                     <option key={u.id} value={u.id}>{u.fullName} ({u.role})</option>
                   ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">نوع وظیفه</label>
+                <select value={newTaskType} onChange={event => setNewTaskType(event.target.value as NonNullable<ActionItem["taskType"]>)} className="w-full p-2.5 border rounded-lg">
+                  {["فرم ارزیابی", "فرم فالوآپ", "اجرای راهکار", "اقدام اجرایی", "پایش رفتار", "مشاهده مشخص"].map(type => <option key={type} value={type}>{type}</option>)}
                 </select>
               </div>
 

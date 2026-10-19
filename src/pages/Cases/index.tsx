@@ -5,6 +5,8 @@ import { Briefcase, AlertCircle, Activity, HeartHandshake, CheckCircle2, FolderO
 import { Tabs, Tab } from "../../components/ui/Tabs";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Badge } from "../../components/ui/Badge";
+import { Search } from "lucide-react";
+import { hasActiveFollowUp as childHasActiveFollowUp, isArchivedOrClosedChild } from "../../domain/caseLifecycle";
 
 export function CasesModule({ user }: { user: User }) {
   const location = useLocation();
@@ -18,6 +20,7 @@ export function CasesModule({ user }: { user: User }) {
   const defaultTab = validTabs.includes(initialTab || "") ? initialTab! : "active";
   
   const [activeTab, setActiveTab] = useState(defaultTab);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     const tab = location.pathname.split("/").pop();
@@ -48,19 +51,20 @@ export function CasesModule({ user }: { user: User }) {
   if (loading || !data) return <div className="p-8 text-center text-gray-500">در حال بارگذاری...</div>;
 
   const children = data.children || [];
+  const isArchivedOrClosed = isArchivedOrClosedChild;
 
   const filterCases = (cases: Child[], filterType: string) => {
     switch(filterType) {
       case "active":
-        return cases.filter(c => !c.archived && c.caseStatus !== "بسته_شده");
+        return cases.filter(c => !isArchivedOrClosed(c));
       case "review":
-        return cases.filter(c => c.caseStatus === "نیازمند_بررسی" || c.caseStatus === "بررسی_تخصصی");
+        return cases.filter(c => !isArchivedOrClosed(c) && (c.caseStatus === "نیازمند_بررسی" || c.caseStatus === "بررسی_تخصصی"));
       case "intervention":
-        return cases.filter(c => c.caseStatus === "مداخله");
+        return cases.filter(c => !isArchivedOrClosed(c) && (c.caseStatus === "مداخله" || (data.actionItems || []).some(action => action.childId === c.id && action.taskType === "اجرای راهکار" && action.status !== "انجام_شده" && action.status !== "لغوشده")));
       case "followup":
-        return cases.filter(c => c.caseStatus === "فالوآپ");
+        return cases.filter(c => !isArchivedOrClosed(c) && childHasActiveFollowUp(c.id, data.followUps, data.actionItems));
       case "closed":
-        return cases.filter(c => c.caseStatus === "بسته_شده" || c.archived);
+        return cases.filter(c => isArchivedOrClosed(c));
       default:
         return [];
     }
@@ -115,7 +119,7 @@ export function CasesModule({ user }: { user: User }) {
           {cases.map(c => (
             <tr key={c.id} className="hover:bg-gray-50">
               <td className="px-6 py-4 text-indigo-600 font-medium cursor-pointer hover:underline" onClick={() => navigate(`/child/${c.id}`)}>
-                {c.id}
+                {c.childId || c.id}
               </td>
               <td className="px-6 py-4 text-gray-900 font-bold">{c.firstName} {c.lastName}</td>
               <td className="px-6 py-4">{getStatusBadge(c.caseStatus)}</td>
@@ -136,7 +140,10 @@ export function CasesModule({ user }: { user: User }) {
     </div>
   );
 
-  const displayedCases = filterCases(children, activeTab);
+  const query = searchQuery.trim().toLocaleLowerCase();
+  const displayedCases = filterCases(children, activeTab).filter(child => !query ||
+    `${child.firstName} ${child.lastName}`.toLocaleLowerCase().includes(query) ||
+    (child.childId || "").toLocaleLowerCase().includes(query) || child.id.toLocaleLowerCase().includes(query));
 
   return (
     <div className="space-y-6 pb-20">
@@ -154,6 +161,11 @@ export function CasesModule({ user }: { user: User }) {
         </div>
         
         <Tabs tabs={tabs} activeTab={activeTab} onChange={handleTabChange} />
+      </div>
+
+      <div className="relative max-w-xl">
+        <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+        <input value={searchQuery} onChange={event => setSearchQuery(event.target.value)} placeholder="جست‌وجو با نام، Child ID یا شناسه پرونده" className="w-full rounded-lg border border-gray-300 bg-white py-2.5 pr-10 pl-3 text-sm" />
       </div>
 
       <div className="mt-6">

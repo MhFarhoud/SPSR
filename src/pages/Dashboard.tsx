@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { fetchData } from "../api";
 import type { AppData, User, Child } from "../types";
 import { Plus, User as UserIcon, FileText, AlertCircle, ShieldAlert } from "lucide-react";
+import { getActiveChildren } from "../domain/caseLifecycle";
 
 export function Dashboard({ user }: { user: User }) {
   const [data, setData] = useState<AppData | null>(null);
@@ -14,7 +15,7 @@ export function Dashboard({ user }: { user: User }) {
   if (!data) return <div className="p-8 text-center text-gray-500">در حال بارگذاری...</div>;
 
   // Filter children based on role
-  let visibleChildren = data.children.filter(child => !child.archived);
+  let visibleChildren = getActiveChildren(data.children);
   if (user.role === "مربی" || user.role === "سرمربی") {
     visibleChildren = visibleChildren.filter(c => user.centerIds.includes(c.currentCenterId));
   } else if (user.role === "سوپروایزر") {
@@ -32,15 +33,19 @@ export function Dashboard({ user }: { user: User }) {
   }
 
   const getChildStatus = (childId: string) => {
-    const alignment = data.alignments.filter(a => a.childId === childId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-    if (alignment) return { text: alignment.suggestedPath, level: alignment.overallTeacherLevel }; // Rough proxy
-    
-    const tAssess = data.teacherAssessments
-      .filter(t => t.childId === childId)
+    const latestByTimestamp = <T extends { id: string; childId: string; createdAt: string; updatedAt?: string; submittedAt?: string; score?: { totalLevel: string } }>(forms: T[]) => forms
+      .filter(form => form.childId === childId)
       .sort((a, b) => new Date(b.submittedAt || b.updatedAt || b.createdAt).getTime() - new Date(a.submittedAt || a.updatedAt || a.createdAt).getTime())[0];
-    if (tAssess) return { text: "در انتظار فرم والد", level: tAssess.score?.totalLevel };
-    
-    return { text: "ارزیابی نشده", level: "نامشخص" };
+    const teacherForm = latestByTimestamp(data.teacherAssessments.filter(form => form.score));
+    const parentForm = latestByTimestamp(data.parentAssessments.filter(form => form.score));
+    const validAlignment = teacherForm && parentForm ? data.alignments
+      .filter(item => item.childId === childId && item.teacherAssessmentId === teacherForm.id && item.parentAssessmentId === parentForm.id)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] : undefined;
+    const latestScoreForm = [teacherForm, parentForm].filter(Boolean).sort((a, b) => new Date(b!.submittedAt || b!.updatedAt || b!.createdAt).getTime() - new Date(a!.submittedAt || a!.updatedAt || a!.createdAt).getTime())[0];
+    return {
+      text: validAlignment?.suggestedPath || (latestScoreForm ? "نیازمند پایش بر اساس آخرین فرم ثبت‌شده" : "ارزیابی نشده"),
+      level: validAlignment?.overallTeacherLevel || latestScoreForm?.score?.totalLevel || "نامشخص"
+    };
   };
 
   const getLevelColor = (level?: string) => {
