@@ -505,38 +505,64 @@ export function ChildProfile({ user }: { user?: User }) {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {followUps.map((fu, idx) => (
+                  {followUps.map((fu, idx) => {
+                    const registrar = allUsers.find(item => item.id === fu.teacherId);
+                    const sourceAction = actions.find(item => item.id === fu.actionItemId);
+                    const baselineForm = fu.previousAssessmentType === "PPCS"
+                      ? parentForms.find(item => item.id === fu.previousAssessmentId)
+                      : teacherForms.find(item => item.id === fu.previousAssessmentId);
+                    const submittedDate = fu.submittedAt || fu.createdAt;
+                    const isSubmitted = ["SUBMITTED", "LOCKED", "ثبت_نهایی_شده"].includes(fu.status);
+                    const statusLabel = isSubmitted ? "ثبت نهایی" : fu.status.replaceAll("_", " ");
+                    const yesNo = (value?: boolean) => value === undefined ? "ثبت نشده" : value ? "بله" : "خیر";
+                    const detailCard = (label: string, value?: React.ReactNode, emphasis = "") => (
+                      <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                        <span className="mb-1 block text-xs text-gray-500">{label}</span>
+                        <span className={`text-sm font-medium text-gray-900 ${emphasis}`}>{value || "ثبت نشده"}</span>
+                      </div>
+                    );
+                    return (
                     <div key={fu.id} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
                       <div className="flex justify-between items-start mb-4">
                         <div>
-                          <span className="text-indigo-600 font-bold text-sm bg-indigo-50 px-2 py-1 rounded">فالوآپ #{followUps.length - idx}</span>
-                          <h4 className="font-bold text-gray-900 mt-2">رفتار هدف: {fu.targetBehaviors[0]}</h4>
-                          <span className="text-sm text-gray-500">حوزه‌ها: {fu.targetDomains.join("، ")} | ثبت: {new Date(fu.createdAt).toLocaleDateString('fa-IR')}</span>
+                          <span className="text-indigo-600 font-bold text-sm bg-indigo-50 px-2 py-1 rounded">فالوآپ #{fu.followUpNumber || followUps.length - idx}</span>
+                          <h4 className="font-bold text-gray-900 mt-2">رفتار هدف: {fu.targetBehaviors.join("، ") || "ثبت نشده"}</h4>
+                          <span className="text-sm text-gray-500">حوزه‌ها: {fu.targetDomains.join("، ") || "ثبت نشده"}</span>
                         </div>
-                        <Badge variant="success">ثبت نهایی</Badge>
+                        <Badge variant={isSubmitted ? "success" : "warning"}>{statusLabel}</Badge>
                       </div>
-                      
+
+                      <div className="mb-4 rounded-xl border border-indigo-100 bg-indigo-50/60 p-4">
+                        <h5 className="mb-3 text-sm font-bold text-indigo-900">اطلاعات ثبت و مبنای فالوآپ</h5>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                          {detailCard("دلیل شروع فالوآپ", fu.triggerReason)}
+                          {detailCard("ثبت‌کننده", registrar?.fullName)}
+                          {detailCard("تاریخ ثبت", new Date(submittedDate).toLocaleDateString("fa-IR"))}
+                          {detailCard("نسخه فرم", fu.formVersion)}
+                          {detailCard("نوع ارزیابی پایه", fu.previousAssessmentType === "TPCS" ? "فرم مربی (TPCS)" : fu.previousAssessmentType === "PPCS" ? "فرم والد (PPCS)" : undefined)}
+                          {detailCard("تاریخ ارزیابی پایه", baselineForm ? new Date(baselineForm.createdAt).toLocaleDateString("fa-IR") : undefined)}
+                          {detailCard("وظیفه مرتبط", sourceAction?.action)}
+                          {detailCard("وضعیت فرم", statusLabel)}
+                        </div>
+                      </div>
+
+                      <h5 className="mb-2 text-sm font-bold text-gray-800">اجرا و نتیجه کلی</h5>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-                        <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
-                          <span className="block text-xs text-gray-500 mb-1">میزان اجرا</span>
-                          <span className="text-sm font-medium">{fu.implementationLevel}</span>
-                        </div>
-                        <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
-                          <span className="block text-xs text-gray-500 mb-1">اثربخشی کلی</span>
-                          <span className="text-sm font-medium">{fu.effectiveness}</span>
-                        </div>
-                        <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
-                          <span className="block text-xs text-gray-500 mb-1">مشکل همچنان وجود دارد؟</span>
-                          <span className="text-sm font-medium text-danger-600">{fu.problemStillExists}</span>
-                        </div>
-                        <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
-                          <span className="block text-xs text-gray-500 mb-1">تغییر کلی</span>
-                          <span className="text-sm font-medium text-indigo-700">{fu.overallChange}</span>
-                        </div>
+                        {detailCard("میزان اجرای راهکارها", fu.implementationLevel)}
+                        {detailCard("علت اجرا نشدن یا اجرای کم", fu.nonImplementationReason)}
+                        {detailCard("اثربخشی راهکارها", fu.effectiveness)}
+                        {detailCard("تغییر کلی رفتار هدف", fu.overallChange, "text-indigo-700")}
+                        {detailCard("مشکل هدف همچنان وجود دارد؟", fu.problemStillExists, "text-red-700")}
+                        {detailCard("پریشانی فعلی کودک", fu.childDistress)}
+                        {detailCard("اثر بر یادگیری و فعالیت کلاس", fu.impactOnLearning)}
+                        {detailCard("اثر بر ارتباط با همسالان", fu.impactOnPeers)}
+                        {detailCard("اثر بر ارتباط با مربی", fu.impactOnTeacher)}
+                        {detailCard("دشواری تعامل برای مربی یا کلاس", fu.classManagementBurden)}
                       </div>
+
                       {fu.scaleScores && fu.scaleScores.length > 0 && (
                         <div className="mt-4 space-y-2">
-                          <h5 className="text-sm font-bold text-gray-800">نمره گویه‌های حوزه فالوآپ (از ۱۰)</h5>
+                          <h5 className="text-sm font-bold text-gray-800">نتیجه نمره‌گذاری حوزه‌های فالوآپ (بدون نمایش پاسخ گویه‌ها)</h5>
                           {fu.scaleScores.map(scale => (
                             <div key={scale.domain} className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
                               <span>{scale.domain}</span>
@@ -545,10 +571,36 @@ export function ChildProfile({ user }: { user?: User }) {
                           ))}
                         </div>
                       )}
-                      {fu.additionalObservation && <p className="mt-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-900"><strong>مشاهدهٔ تکمیلی:</strong> {fu.additionalObservation}</p>}
+
+                      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                        <section className="rounded-xl border border-gray-200 p-4">
+                          <h5 className="mb-3 text-sm font-bold text-gray-800">اقدامات مرکز</h5>
+                          {fu.centerActionsDone?.length ? <ul className="list-inside list-disc space-y-1 text-sm text-gray-700">{fu.centerActionsDone.map(action => <li key={action}>{action}</li>)}</ul> : <p className="text-sm text-gray-500">اقدامی ثبت نشده است.</p>}
+                        </section>
+                        <section className="rounded-xl border border-gray-200 p-4">
+                          <h5 className="mb-3 text-sm font-bold text-gray-800">خدمات تخصصی و وضعیت آن‌ها</h5>
+                          {fu.specialistServicesDone?.length ? <div className="space-y-2">{fu.specialistServicesDone.map(item => <div key={item.service} className="flex items-center justify-between gap-3 rounded-lg bg-gray-50 px-3 py-2 text-sm"><span>{item.service}</span><Badge variant="info">{item.status}</Badge></div>)}</div> : <p className="text-sm text-gray-500">خدمت تخصصی ثبت نشده است.</p>}
+                        </section>
+                      </div>
+
+                      <section className="mt-4 rounded-xl border border-gray-200 p-4">
+                        <h5 className="mb-3 text-sm font-bold text-gray-800">رفتار یا نشانه جدید</h5>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                          {detailCard("رفتار جدید مشاهده شده؟", yesNo(fu.newBehaviorObserved))}
+                          {detailCard("واژه‌های کلیدی", fu.newBehaviorKeywords?.join("، "))}
+                          {detailCard("تاریخ تقریبی شروع", fu.newBehaviorDate)}
+                          {detailCard("نیازمند بررسی فوری؟", yesNo(fu.requiresImmediateReport), fu.requiresImmediateReport ? "text-red-700" : "")}
+                        </div>
+                        {fu.newBehaviorDescription && <p className="mt-3 whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-sm text-gray-800"><strong>توضیح رفتار جدید:</strong> {fu.newBehaviorDescription}</p>}
+                      </section>
+
+                      {fu.additionalObservation && <p className="mt-4 whitespace-pre-wrap rounded-lg bg-blue-50 p-3 text-sm text-blue-900"><strong>مشاهدهٔ تکمیلی:</strong> {fu.additionalObservation}</p>}
+                      {fu.freeTextNotes && <p className="mt-3 whitespace-pre-wrap rounded-lg bg-amber-50 p-3 text-sm text-amber-950"><strong>توضیحات تکمیلی:</strong> {fu.freeTextNotes}</p>}
+                      <div className="mt-3 rounded-lg border border-violet-100 bg-violet-50 p-3 text-sm text-violet-950"><strong>تصمیم سرمربی یا تیم تخصصی:</strong> {fu.specialistDecision || "ثبت نشده"}</div>
                       {canManageChild && <div className="mt-3 flex justify-end border-t pt-3"><button type="button" onClick={() => navigate(`/child/${child.id}/followup/new?edit=${encodeURIComponent(fu.id)}`)} className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 px-3 py-1.5 text-sm text-indigo-700 hover:bg-indigo-50"><Pencil className="h-4 w-4" /> ویرایش فرم فالوآپ</button></div>}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
