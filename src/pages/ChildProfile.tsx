@@ -8,6 +8,8 @@ import { Child, User, TeacherAssessment, ParentAssessment, AlignmentResult, Foll
 import { User as UserIcon, Activity, FileText, CheckSquare, Target, Settings, Plus, ListTodo, AlertTriangle, Pencil, X, Trash2 } from "lucide-react";
 import { calculateExactAge } from "../utils/ageCalculator";
 
+const ALIGNMENT_PATHS: AlignmentResult["suggestedPath"][] = ["پایش عادی", "بررسی حوزه مرزی و مشاهده هدفمند فضای کلاس", "بررسی شرایط خانه و گفت‌وگوی سرمربی با والد", "ورود به رصد و فالوآپ", "بررسی فوری‌تر محیط مرکز و گزارش مربی", "بررسی شرایط خانه و مصاحبه تکمیلی با والد", "بررسی تکمیلی و احتمال ورود به مسیر زرد یا قرمز", "بررسی تخصصی و تعیین شدت ارجاع"];
+
 export function ChildProfile({ user }: { user?: User }) {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -23,6 +25,8 @@ export function ChildProfile({ user }: { user?: User }) {
   const [centers, setCenters] = useState<Center[]>([]);
   const [classes, setClasses] = useState<ClassGroup[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [alignmentChoices, setAlignmentChoices] = useState<Record<string, AlignmentResult["suggestedPath"]>>({});
+  const [alignmentReasons, setAlignmentReasons] = useState<Record<string, string>>({});
   const [editOpen, setEditOpen] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState("");
@@ -35,7 +39,10 @@ export function ChildProfile({ user }: { user?: User }) {
       setAllUsers(d.users || []);
       setTeacherForms(d.teacherAssessments?.filter(f => f.childId === id) || []);
       setParentForms(d.parentAssessments?.filter(f => f.childId === id) || []);
-      setAlignments(d.alignments?.filter(a => a.childId === id) || []);
+      const childAlignments = d.alignments?.filter(a => a.childId === id) || [];
+      setAlignments(childAlignments);
+      setAlignmentChoices(Object.fromEntries(childAlignments.map(item => [item.id, item.finalPath || item.suggestedPath])));
+      setAlignmentReasons(Object.fromEntries(childAlignments.map(item => [item.id, item.decisionReason || ""])));
       setFollowUps(d.followUps?.filter(f => f.childId === id) || []);
       setActions(d.actionItems?.filter(a => a.childId === id) || []);
       
@@ -145,6 +152,17 @@ export function ChildProfile({ user }: { user?: User }) {
     setChild({ ...child, urgentAction: result.urgentAction });
     const refreshed = await fetchData();
     setTimeline(refreshed.auditLogs?.filter(item => item.entityId === id) || []);
+  };
+
+  const saveAlignmentDecision = async (alignment: AlignmentResult) => {
+    const finalPath = alignmentChoices[alignment.id] || alignment.finalPath || alignment.suggestedPath;
+    const decisionReason = (alignmentReasons[alignment.id] || "").trim();
+    if (finalPath !== alignment.suggestedPath && !decisionReason) return window.alert("برای انتخاب مسیری متفاوت از پیشنهاد سامانه، دلیل تغییر را وارد کنید.");
+    const response = await fetch(`/api/assessments/alignment/${encodeURIComponent(alignment.id)}/decision`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ finalPath, decisionReason }) });
+    const result = await response.json();
+    if (!response.ok || !result.success) return window.alert(result.message || "ثبت تصمیم نهایی انجام نشد.");
+    setAlignments(current => current.map(item => item.id === alignment.id ? result.alignment : item));
+    window.alert("تصمیم نهایی ثبت شد.");
   };
 
   const getStatusBadge = (status?: string) => {
@@ -346,16 +364,24 @@ export function ChildProfile({ user }: { user?: User }) {
                       {user?.role !== "مربی" && form.score && (
                         <AssessmentScoreSummary score={form.score} />
                       )}
-                      {(form.freeTextNotes || form.problemAreas?.length || form.scenarios?.length) ? (
+                      {user?.role !== "مربی" && (
                         <details className="mt-3 rounded-lg border border-blue-100 bg-blue-50/60 p-3">
-                          <summary className="cursor-pointer text-sm font-medium text-blue-900">مشاهدات مربی</summary>
-                          <div className="mt-3 space-y-3 text-sm text-gray-700">
+                          <summary className="cursor-pointer text-sm font-medium text-blue-900">خروجی کامل اطلاعات ساختاریافته مربی</summary>
+                          <div className="mt-3 grid gap-2 text-sm text-gray-700 sm:grid-cols-2">
+                            <p>سن کودک هنگام ارزیابی: {form.childAgeAtAssessment || "ثبت نشده"}</p>
+                            <p>مدت آشنایی مربی با کودک: {form.familiarityDuration || "ثبت نشده"}</p>
+                            <p>وجود مشکل کلی: {form.overallProblem || "ثبت نشده"}</p>
+                            <p>مدت وجود مشکل: {form.durationOfProblem || "ثبت نشده"}</p>
+                            <p>پریشانی یا ناراحتی کودک: {form.childDistressLevel || "ثبت نشده"}</p>
+                            <p>اثر بر ارتباط با همسالان: {form.impactOnPeerRelations || "ثبت نشده"}</p>
+                            <p>اثر بر یادگیری: {form.impactOnLearning || "ثبت نشده"}</p>
+                            <p>فشار بر مربی یا کلاس: {form.burdenOnTeacherOrClass || "ثبت نشده"}</p>
                             {!!form.problemAreas?.length && <p><span className="font-medium">حوزه‌ها و شدت مشاهده‌شده: </span>{form.problemAreas.map(area => `${area.domain} (${area.severity})`).join("، ")}</p>}
-                            {!!form.scenarios?.length && <div className="space-y-2"><p className="font-medium">پاسخ به سناریوهای مشاهده:</p>{form.scenarios.map(scenario => <div key={scenario.scenarioId}><p>{scenario.domain}{scenario.scenarioText ? ` — ${scenario.scenarioText}` : ""}</p><p className="mr-3 text-gray-600">پاسخ مربی: {scenario.selectedOption}</p></div>)}</div>}
-                            {!!form.freeTextNotes?.trim() && <p className="whitespace-pre-wrap"><span className="font-medium">یادداشت مربی: </span>{form.freeTextNotes}</p>}
+                            {!!form.scenarios?.length && <div className="space-y-2 sm:col-span-2"><p className="font-medium">پاسخ به سناریوهای مشاهده:</p>{form.scenarios.map(scenario => <div key={scenario.scenarioId} className="rounded bg-white/70 p-2"><p>{scenario.domain}{scenario.scenarioText ? ` — ${scenario.scenarioText}` : ""}</p><p className="mr-3 text-gray-600">پاسخ مربی: {scenario.selectedOption}</p></div>)}</div>}
+                            <p className="whitespace-pre-wrap sm:col-span-2"><span className="font-medium">مشاهده آزاد مربی: </span>{form.freeTextNotes?.trim() || "توضیح اضافه‌ای ثبت نشده است."}</p>
                           </div>
                         </details>
-                      ) : <p className="mt-3 text-sm text-gray-500">مشاهدهٔ تکمیلی یا یادداشتی ثبت نشده است.</p>}
+                      )}
                       {canEditForm && <div className="mt-3 flex justify-end gap-2 border-t pt-3">
                         <button type="button" onClick={() => navigate(`/child/${child.id}/form?edit=${encodeURIComponent(form.id)}`)} className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 px-3 py-1.5 text-sm text-indigo-700 hover:bg-indigo-50"><Pencil className="h-4 w-4" /> ویرایش فرم</button>
                         <button type="button" onClick={() => void deleteTeacherForm(form)} className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"><Trash2 className="h-4 w-4" /> حذف فرم</button>
@@ -471,6 +497,15 @@ export function ChildProfile({ user }: { user?: User }) {
                           <Target className="w-5 h-5" /> مسیر پیشنهادی سامانه
                         </h5>
                         <p className="text-indigo-800">{alignment.suggestedPath}</p>
+                      </div>
+                      <div className="mt-4 rounded-lg border border-violet-200 bg-violet-50 p-5">
+                        <h5 className="font-medium text-violet-950">تصمیم نهایی متخصص</h5>
+                        <select value={alignmentChoices[alignment.id] || alignment.finalPath || alignment.suggestedPath} onChange={event => setAlignmentChoices(current => ({ ...current, [alignment.id]: event.target.value as AlignmentResult["suggestedPath"] }))} className="mt-3 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-sm">
+                          {ALIGNMENT_PATHS.map(path => <option key={path} value={path}>{path}</option>)}
+                        </select>
+                        {(alignmentChoices[alignment.id] || alignment.finalPath || alignment.suggestedPath) !== alignment.suggestedPath && <textarea value={alignmentReasons[alignment.id] || ""} onChange={event => setAlignmentReasons(current => ({ ...current, [alignment.id]: event.target.value }))} placeholder="دلیل تغییر مسیر پیشنهادی سامانه (الزامی)" className="mt-3 w-full rounded-lg border border-violet-200 bg-white p-2.5 text-sm" rows={2} />}
+                        {alignment.decidedAt && <p className="mt-3 text-xs text-violet-800">ثبت‌شده توسط {allUsers.find(item => item.id === alignment.decisionById)?.fullName || alignment.decisionByRole || "کاربر مجاز"} در {new Date(alignment.decidedAt).toLocaleString("fa-IR")}{alignment.decisionReason ? ` · دلیل: ${alignment.decisionReason}` : ""}</p>}
+                        {["ادمین", "تیم_تخصصی", "سوپروایزر", "سرمربی"].includes(user?.role || "") && <button type="button" onClick={() => void saveAlignmentDecision(alignment)} className="mt-3 rounded-lg bg-violet-700 px-4 py-2 text-sm font-medium text-white hover:bg-violet-800">ثبت تصمیم نهایی</button>}
                       </div>
                     </div>
                   </div>

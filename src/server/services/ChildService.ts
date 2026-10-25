@@ -4,15 +4,17 @@ import { childRepository } from "../repositories/ChildRepository";
 import { userRepository } from "../repositories/UserRepository";
 import { db } from "../db";
 import { withEffectiveCaseStatus } from "./ChildClassification";
+import { hasActiveFollowUp, isArchivedOrClosedChild } from "../../domain/caseLifecycle";
 
 export class ChildService {
   /**
    * Generates a readable CH-XXXXXX ID
    */
   private generateChildId(): string {
-    const totalChildren = childRepository.findAll().length;
-    // Simple incremental ID based on count. In a real DB, we'd use a sequence.
-    const seq = totalChildren + 1;
+    const seq = childRepository.findAll().reduce((max, child) => {
+      const current = Number((child.childId || "").match(/^CH-(\d+)$/)?.[1] || 0);
+      return Math.max(max, current);
+    }, 0) + 1;
     return `CH-${seq.toString().padStart(6, '0')}`;
   }
 
@@ -46,7 +48,7 @@ export class ChildService {
     return childRepository.findById(id);
   }
 
-  public listChildren(page: number, pageSize: number, search?: string, userId?: string, archived = false, status?: string) {
+  public listChildren(page: number, pageSize: number, search?: string, userId?: string, archived = false, status?: string, centerId?: string, classId?: string) {
     let allowedCenterIds: string[] | null = null; // null means all
     let allowedClassIds: string[] | null = null; // null means all
 
@@ -66,17 +68,27 @@ export class ChildService {
       page, 
       pageSize,
       (child) => {
-        if (!!child.archived !== archived) return false;
-        if (status && withEffectiveCaseStatus(child, db.data.alignments, [...db.data.teacherAssessments, ...db.data.parentAssessments], db.data.followUps).caseStatus !== status) return false;
+        if (isArchivedOrClosedChild(child) !== archived) return false;
+        const effectiveStatus = withEffectiveCaseStatus(child, db.data.alignments, [...db.data.teacherAssessments, ...db.data.parentAssessments], db.data.followUps).caseStatus;
+        const matchesStatus = !status
+          || (status === "فالوآپ" && hasActiveFollowUp(child.id, db.data.followUps, db.data.actionItems))
+          || (status === "نیازمند_بررسی" && ["نیازمند_بررسی", "بررسی_تخصصی"].includes(effectiveStatus || ""))
+          || (status === "مداخله" && (effectiveStatus === "مداخله" || db.data.actionItems.some(action => action.childId === child.id && action.taskType === "اجرای راهکار" && !["انجام_شده", "لغوشده"].includes(action.status))))
+          || effectiveStatus === status;
+        if (!matchesStatus) return false;
         if (allowedCenterIds && !allowedCenterIds.includes(child.currentCenterId)) return false;
         if (allowedClassIds && (!child.currentClassId || !allowedClassIds.includes(child.currentClassId))) return false;
+        if (centerId && child.currentCenterId !== centerId) return false;
+        if (classId && child.currentClassId !== classId) return false;
 
         if (!search) return true;
         const s = search.toLowerCase();
         return (
           child.firstName.toLowerCase().includes(s) ||
           child.lastName.toLowerCase().includes(s) ||
-          (child.childId || "").toLowerCase().includes(s)
+          `${child.firstName} ${child.lastName}`.toLowerCase().includes(s) ||
+          (child.childId || "").toLowerCase().includes(s) ||
+          child.id.toLowerCase().includes(s)
         );
       },
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()

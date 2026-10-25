@@ -83,22 +83,22 @@ export function ReportsModule({ user }: { user: User }) {
           <div className="space-y-6">
             <h3 className="text-lg font-bold text-gray-900 border-b pb-2">داشبورد مدیریتی (Overview)</h3>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-center items-center">
+              <Link to="/children" className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-center items-center hover:border-indigo-300">
                 <span className="text-gray-500 text-sm font-medium mb-1">کل پرونده‌های فعال</span>
                 <span className="text-4xl font-black text-indigo-600">{activeCasesCount}</span>
-              </div>
-              <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-center items-center">
+              </Link>
+              <Link to="/children?status=مداخله" className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-center items-center hover:border-amber-300">
                 <span className="text-gray-500 text-sm font-medium mb-1">پرونده‌های در حال مداخله</span>
                 <span className="text-4xl font-black text-amber-500">{interventionCount}</span>
-              </div>
-              <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-center items-center">
+              </Link>
+              <Link to="/children?status=فالوآپ" className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-center items-center hover:border-teal-300">
                 <span className="text-gray-500 text-sm font-medium mb-1">کودکان در مسیر فالوآپ</span>
                 <span className="text-4xl font-black text-teal-600">{followupCount}</span>
-              </div>
-              <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-center items-center">
+              </Link>
+              <button type="button" onClick={() => handleTabChange("assessments")} className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex flex-col justify-center items-center hover:border-blue-300">
                 <span className="text-gray-500 text-sm font-medium mb-1">فرم‌های همسویی‌شده</span>
                 <span className="text-4xl font-black text-blue-600">{alignmentCount}</span>
-              </div>
+              </button>
             </div>
             <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm mt-6">
               <h4 className="text-gray-500 font-medium mb-4">وضعیت کلی پرونده‌ها در یک نگاه</h4>
@@ -221,23 +221,23 @@ export function ReportsModule({ user }: { user: User }) {
                     <div className="space-y-3 text-sm">
                       <div className="flex justify-between border-b border-gray-50 pb-2">
                         <span className="text-gray-500">کودکان فعال:</span>
-                        <Link to="/children" className="font-bold text-indigo-700 hover:underline">{activeCenterChildren.length} نفر</Link>
+                        <Link to={`/children?centerId=${encodeURIComponent(center.id)}`} className="font-bold text-indigo-700 hover:underline">{activeCenterChildren.length} نفر</Link>
                       </div>
                       <div className="flex justify-between border-b border-gray-50 pb-2">
                         <span className="text-gray-500">نیازمند بررسی / توجه تخصصی:</span>
-                        <Link to="/cases/review" className="font-bold text-danger-600 hover:underline">{centerReview.length} نفر</Link>
+                        <Link to={`/children?centerId=${encodeURIComponent(center.id)}&status=نیازمند_بررسی`} className="font-bold text-danger-600 hover:underline">{centerReview.length} نفر</Link>
                       </div>
                       <div className="flex justify-between border-b border-gray-50 pb-2">
                         <span className="text-gray-500">در مداخله:</span>
-                        <Link to="/cases/intervention" className="font-bold text-amber-600 hover:underline">{centerInterventions.length} نفر</Link>
+                        <Link to={`/children?centerId=${encodeURIComponent(center.id)}&status=مداخله`} className="font-bold text-amber-600 hover:underline">{centerInterventions.length} نفر</Link>
                       </div>
                       <div className="flex justify-between border-b border-gray-50 pb-2">
                         <span className="text-gray-500">دارای فالوآپ فعال:</span>
-                        <Link to="/cases/followup" className="font-bold text-teal-700 hover:underline">{centerFollowups.length} نفر</Link>
+                        <Link to={`/children?centerId=${encodeURIComponent(center.id)}&status=فالوآپ`} className="font-bold text-teal-700 hover:underline">{centerFollowups.length} نفر</Link>
                       </div>
                       <div className="flex justify-between border-b border-gray-50 pb-2">
                         <span className="text-gray-500">بسته / بایگانی:</span>
-                        <Link to="/children/archive" className="font-bold text-gray-600 hover:underline">{archivedCount} نفر</Link>
+                        <Link to={`/children/archive?centerId=${encodeURIComponent(center.id)}`} className="font-bold text-gray-600 hover:underline">{archivedCount} نفر</Link>
                       </div>
                       <div className="flex justify-between border-b border-gray-50 pb-2">
                         <span className="text-gray-500">نسبت نیاز به مداخله:</span>

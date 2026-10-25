@@ -56,7 +56,7 @@ export function getEffectiveCaseStatus(
       "بررسی تکمیلی و احتمال ورود به مسیر زرد یا قرمز": "بررسی_تخصصی",
       "بررسی تخصصی و تعیین شدت ارجاع": "بررسی_تخصصی"
     };
-    return pathToStatus[latest.suggestedPath] || child.caseStatus;
+    return pathToStatus[latest.finalPath || latest.suggestedPath] || child.caseStatus;
   }
 
   // A single completed form must affect the case list even while the other form is pending.

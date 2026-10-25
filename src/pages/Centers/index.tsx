@@ -3,6 +3,7 @@ import { Building, Users, AlertCircle, Plus, ChevronDown, ChevronLeft } from "lu
 import { fetchData, createCenter, updateCenter, createClass, updateClass } from "../../api";
 import { User, AppData, Center, ClassGroup } from "../../types";
 import { useNavigate } from "react-router-dom";
+import { isArchivedOrClosedChild } from "../../domain/caseLifecycle";
 
 /** PDF بخش ۳: مراکز
  * هدف: مشخص کردن ساختار سازمانی پروژه
@@ -156,7 +157,7 @@ export function CentersModule({ user }: { user: User }) {
                             {hcClasses.map(cls => {
                               const clsIsExpanded = expandedNodes[cls.id];
                               const teacher = data.users.find(u => u.id === cls.teacherId);
-                              const classChildren = data.children.filter(c => c.currentClassId === cls.id);
+                              const classChildren = data.children.filter(c => c.currentClassId === cls.id && !isArchivedOrClosedChild(c));
                               
                               return (
                                 <div key={cls.id}>

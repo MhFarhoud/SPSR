@@ -42,16 +42,18 @@ export function ChildrenList({ user }: { user?: User }) {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>(() => new URLSearchParams(location.search).get("status") || "");
+  const centerFilter = new URLSearchParams(location.search).get("centerId") || "";
+  const classFilter = new URLSearchParams(location.search).get("classId") || "";
   const isArchivePage = location.pathname.includes("/archive");
   const pageSize = 20;
 
   useEffect(() => {
     fetchData(page, search);
-  }, [page, isArchivePage]);
+  }, [page, isArchivePage, statusFilter]);
 
   const fetchData = (page: number, searchQuery: string) => {
-    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize), search: searchQuery, userId: user?.id || "", archive: String(isArchivePage), status: statusFilter });
+    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize), search: searchQuery, userId: user?.id || "", archive: String(isArchivePage), status: statusFilter, centerId: centerFilter, classId: classFilter });
     fetch(`/api/children?${params}`)
       .then(res => res.json())
       .then(res => {
@@ -154,6 +156,7 @@ export function ChildrenList({ user }: { user?: User }) {
       </div>
 
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+        {(centerFilter || classFilter) && <div className="mb-3 flex items-center justify-between rounded-lg bg-indigo-50 px-3 py-2 text-sm text-indigo-800"><span>فهرست بر اساس محدوده انتخاب‌شده در داشبورد فیلتر شده است.</span><button type="button" onClick={() => navigate(isArchivePage ? "/children/archive" : "/children")} className="font-medium underline">حذف فیلتر محدوده</button></div>}
         <form onSubmit={handleSearch} className="flex gap-4">
           <div className="flex-1 relative">
             <Search className="w-5 h-5 absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -169,7 +172,7 @@ export function ChildrenList({ user }: { user?: User }) {
           {user?.role !== "مربی" && !isArchivePage && (
             <select 
               value={statusFilter} 
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
               className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
             >
               <option value="">همه وضعیت‌ها</option>

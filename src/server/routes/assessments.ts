@@ -321,6 +321,31 @@ assessmentsRouter.post("/followup", (req, res) => {
   res.json({ success: true });
 });
 
+// Record the specialist's final decision separately from the system suggestion.
+assessmentsRouter.put("/alignment/:id/decision", (req, res) => {
+  const actor = getSessionUser(req);
+  if (!actor || !["ادمین", "تیم_تخصصی", "سوپروایزر", "سرمربی"].includes(actor.role)) {
+    return res.status(403).json({ success: false, message: "اجازه ثبت تصمیم نهایی را ندارید." });
+  }
+  const alignment = db.data.alignments.find(item => item.id === req.params.id);
+  if (!alignment) return res.status(404).json({ success: false, message: "نتیجه همسویی پیدا نشد." });
+  const child = db.data.children.find(item => item.id === alignment.childId);
+  if (!child || !canViewChildRecord(actor, child)) return res.status(403).json({ success: false, message: "این پرونده در محدوده دسترسی شما نیست." });
+  const finalPath = req.body?.finalPath as typeof alignment.suggestedPath;
+  const validPaths = ["پایش عادی", "بررسی حوزه مرزی و مشاهده هدفمند فضای کلاس", "بررسی شرایط خانه و گفت‌وگوی سرمربی با والد", "ورود به رصد و فالوآپ", "بررسی فوری‌تر محیط مرکز و گزارش مربی", "بررسی شرایط خانه و مصاحبه تکمیلی با والد", "بررسی تکمیلی و احتمال ورود به مسیر زرد یا قرمز", "بررسی تخصصی و تعیین شدت ارجاع"];
+  if (!validPaths.includes(finalPath)) return res.status(400).json({ success: false, message: "مسیر نهایی معتبر نیست." });
+  const decisionReason = String(req.body?.decisionReason || "").trim();
+  if (finalPath !== alignment.suggestedPath && !decisionReason) return res.status(400).json({ success: false, message: "در صورت تغییر پیشنهاد سامانه، ثبت دلیل الزامی است." });
+  alignment.finalPath = finalPath;
+  alignment.decisionReason = decisionReason || undefined;
+  alignment.decisionById = actor.id;
+  alignment.decisionByRole = actor.role;
+  alignment.decidedAt = new Date().toISOString();
+  db.data.auditLogs.push({ id: uuidv4(), entityType: "Case", entityId: child.id, action: "STATUS_CHANGE", userId: actor.id, timestamp: alignment.decidedAt, oldValue: alignment.suggestedPath, newValue: finalPath, reason: alignment.decisionReason, details: "تصمیم نهایی متخصص برای نتیجه همسویی ثبت شد." });
+  db.persist();
+  res.json({ success: true, alignment });
+});
+
 // Get assessments for a specific child (for ChildProfile tabs)
 assessmentsRouter.get("/child/:childId", (req, res) => {
   const viewer = getSessionUser(req);
@@ -414,7 +439,7 @@ assessmentsRouter.get("/child/:childId/timeline", (req, res) => {
       date: a.createdAt,
       type: "alignment",
       title: "نتیجه همسویی محاسبه شد",
-      details: `مسیر پیشنهادی: ${a.suggestedPath}`
+      details: `مسیر پیشنهادی: ${a.suggestedPath}${a.finalPath ? ` | تصمیم نهایی: ${a.finalPath}${a.decisionReason ? ` | دلیل: ${a.decisionReason}` : ""}` : ""}`
     });
   });
 

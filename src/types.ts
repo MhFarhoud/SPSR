@@ -241,6 +241,11 @@ export interface AlignmentResult {
   misalignmentSeverity: "خفیف" | "قابل‌توجه";
   
   suggestedPath: "پایش عادی" | "بررسی حوزه مرزی و مشاهده هدفمند فضای کلاس" | "بررسی شرایط خانه و گفت‌وگوی سرمربی با والد" | "ورود به رصد و فالوآپ" | "بررسی فوری‌تر محیط مرکز و گزارش مربی" | "بررسی شرایط خانه و مصاحبه تکمیلی با والد" | "بررسی تکمیلی و احتمال ورود به مسیر زرد یا قرمز" | "بررسی تخصصی و تعیین شدت ارجاع";
+  finalPath?: AlignmentResult["suggestedPath"];
+  decisionById?: string;
+  decisionByRole?: Role;
+  decidedAt?: string;
+  decisionReason?: string;
   
   createdAt: string;
 }

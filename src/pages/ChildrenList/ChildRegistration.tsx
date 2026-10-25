@@ -14,7 +14,6 @@ export function ChildRegistration({ user }: { user: User }) {
     birthDate: "",
     gender: "پسر",
     parentContactPhone: "",
-    parentName: "",
     currentCenterId: "",
     currentClassId: "",
     currentStage: "" as Child["currentStage"] | "",
@@ -151,15 +150,6 @@ export function ChildRegistration({ user }: { user: User }) {
                 <option value="">بدون تخصیص کلاس</option>
                 {availableClasses.map(group => { const teacher = data?.users.find(item => item.id === group.teacherId); return <option key={group.id} value={group.id}>{group.name}{teacher ? ` — ${teacher.fullName}` : " — مربی تعیین نشده"}</option>; })}
               </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">نام والد/سرپرست</label>
-              <input 
-                type="text" 
-                value={formData.parentName}
-                onChange={e => setFormData({...formData, parentName: e.target.value})}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-indigo-500 focus:border-indigo-500"
-              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">شماره موبایل والد</label>

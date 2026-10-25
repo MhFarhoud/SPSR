@@ -21,8 +21,10 @@ childrenRouter.get("/", (req, res) => {
   if (viewer.role === "مربی") return res.status(403).json({ success: false, message: "مربی به فهرست پرونده‌ها دسترسی ندارد؛ برای ثبت فرم از بخش ارزیابی‌های من اقدام کنید." });
   const archive = req.query.archive === "true";
   const status = req.query.status as string | undefined;
+  const centerId = req.query.centerId as string | undefined;
+  const classId = req.query.classId as string | undefined;
 
-  const result = childService.listChildren(page, pageSize, search, viewer.id, archive, status);
+  const result = childService.listChildren(page, pageSize, search, viewer.id, archive, status, centerId, classId);
   res.json({ success: true, ...result });
 });
 

@@ -87,13 +87,13 @@ export function SpecializedAdminDashboard({ user }: { user: User }) {
   const closedCases = data.children.filter(c => c.caseStatus === "بسته_شده" || c.caseStatus === "بایگانی" || c.archived).length;
 
   const cards = [
-    { label: "کل کودکان", value: totalChildren, icon: Users, color: "bg-blue-500" },
-    { label: "ارزیابی‌های تکمیل‌شده", value: completedAssessments, icon: FileText, color: "bg-green-500" },
-    { label: "پرونده‌های نیازمند بررسی", value: casesNeedingReview, icon: FileWarning, color: "bg-red-500" },
-    { label: "فالوآپ‌های فعال", value: activeFollowUps, icon: Activity, color: "bg-orange-500" },
-    { label: "اقدام‌های فوری", value: urgentChildren.length, icon: Siren, color: "bg-red-600" },
-    { label: "ارجاعات باز", value: openReferrals, icon: Target, color: "bg-purple-500" },
-    { label: "اقدامات معوق", value: overdueActions, icon: Clock, color: "bg-yellow-500" }
+    { label: "کل کودکان", value: totalChildren, icon: Users, color: "bg-blue-500", link: "/children" },
+    { label: "ارزیابی‌های تکمیل‌شده", value: completedAssessments, icon: FileText, color: "bg-green-500", link: "/assessments" },
+    { label: "پرونده‌های نیازمند بررسی", value: casesNeedingReview, icon: FileWarning, color: "bg-red-500", link: "/children?status=نیازمند_بررسی" },
+    { label: "فالوآپ‌های فعال", value: activeFollowUps, icon: Activity, color: "bg-orange-500", link: "/children?status=فالوآپ" },
+    { label: "اقدام‌های فوری", value: urgentChildren.length, icon: Siren, color: "bg-red-600", link: "/cases/review" },
+    { label: "ارجاعات باز", value: openReferrals, icon: Target, color: "bg-purple-500", link: "/referrals" },
+    { label: "اقدامات معوق", value: overdueActions, icon: Clock, color: "bg-yellow-500", link: "/actions/overdue" }
   ];
 
   return (
@@ -108,11 +108,12 @@ export function SpecializedAdminDashboard({ user }: { user: User }) {
         {cards.map((card, idx) => {
           const Icon = card.icon;
           return (
-            <div key={idx} className="bg-white overflow-hidden shadow-sm rounded-xl border border-gray-100 flex flex-col items-center p-5 hover:shadow-md transition-shadow text-center">
+            <Link key={idx} to={card.link} className="bg-white overflow-hidden shadow-sm rounded-xl border border-gray-100 flex flex-col items-center p-5 hover:shadow-md transition-shadow text-center focus:outline-none focus:ring-2 focus:ring-indigo-500" aria-label={`مشاهده فهرست ${card.label}`}>
               <div className={`p-3 rounded-full ${card.color} text-white mb-3`}><Icon className="w-6 h-6" /></div>
               <p className="text-sm font-medium text-gray-500">{card.label}</p>
               <p className="mt-1 text-2xl font-semibold text-gray-900">{card.value}</p>
-            </div>
+              <span className="mt-2 text-xs text-indigo-600">مشاهده فهرست</span>
+            </Link>
           );
         })}
       </div>
@@ -206,7 +207,7 @@ export function SpecializedAdminDashboard({ user }: { user: User }) {
                 <div key={center.id} className="p-3 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors">
                   <div className="flex justify-between items-center mb-2">
                     <span className="font-bold text-gray-900">{center.name}</span>
-                    <span className="text-xs text-gray-500">{activeCenterChildren.length} کودک فعال · {archivedCount} بسته/بایگانی</span>
+                    <span className="text-xs text-gray-500"><Link to={`/children?centerId=${encodeURIComponent(center.id)}`} className="hover:underline">{activeCenterChildren.length} کودک فعال</Link> · <Link to={`/children/archive?centerId=${encodeURIComponent(center.id)}`} className="hover:underline">{archivedCount} بسته/بایگانی</Link></span>
                   </div>
                   <div className="flex justify-between text-xs text-gray-600 mb-1">
                     <span>تکمیل فرم مربی</span>
@@ -216,9 +217,9 @@ export function SpecializedAdminDashboard({ user }: { user: User }) {
                     <div className="h-1.5 bg-indigo-500 rounded-full" style={{width: `${pct}%`}}></div>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                    <Link to="/cases/review" className="rounded-full bg-red-50 text-red-700 px-2 py-1">نیازمند بررسی {reviewCount}</Link>
-                    <Link to="/cases/intervention" className="rounded-full bg-purple-50 text-purple-700 px-2 py-1">مداخله {interventionCount}</Link>
-                    <Link to="/cases/followup" className="rounded-full bg-orange-50 text-orange-700 px-2 py-1">فالوآپ فعال {followupCount}</Link>
+                    <Link to={`/children?centerId=${encodeURIComponent(center.id)}&status=نیازمند_بررسی`} className="rounded-full bg-red-50 text-red-700 px-2 py-1">نیازمند بررسی {reviewCount}</Link>
+                    <Link to={`/children?centerId=${encodeURIComponent(center.id)}&status=مداخله`} className="rounded-full bg-purple-50 text-purple-700 px-2 py-1">مداخله {interventionCount}</Link>
+                    <Link to={`/children?centerId=${encodeURIComponent(center.id)}&status=فالوآپ`} className="rounded-full bg-orange-50 text-orange-700 px-2 py-1">فالوآپ فعال {followupCount}</Link>
                   </div>
                   <div className="mt-2 text-xs text-gray-500">
                     سوپروایزر: {centerSupervisors.map(person => person.fullName).join("، ") || "تعیین نشده"} · سرمربی: {centerHeadCoaches.map(person => person.fullName).join("، ") || "تعیین نشده"}
