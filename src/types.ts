@@ -457,6 +457,31 @@ export interface ActionItem {
   createdAt: string;
 }
 
+export type AsebaFormType = "CBCL" | "TRF";
+export interface AsebaAnswer { questionId: number | string; answerValue: 0 | 1 | 2; note?: string }
+export interface AsebaScaleScore { key: string; label: string; score: number; max: number; level?: "بهنجار" | "مرزی" | "نابهنجار" }
+export interface AsebaScore {
+  subscales: AsebaScaleScore[];
+  attentionSubscales: AsebaScaleScore[];
+  indices: AsebaScaleScore[];
+  adaptiveScores?: { components: number[]; total: number };
+  rapidReviewFlags: { questionId: number; score: number }[];
+  specialistFlags: { questionId: number; score: number }[];
+}
+export interface AsebaAssessment {
+  id: string;
+  childId: string;
+  respondentId: string;
+  formType: AsebaFormType;
+  formVersion: string;
+  status: AssessmentStatus;
+  answers: AsebaAnswer[];
+  adaptiveScores?: number[];
+  score: AsebaScore;
+  createdAt: string;
+  submittedAt: string;
+}
+
 export interface AppData {
   users: User[];
   centers: Center[];
@@ -465,6 +490,7 @@ export interface AppData {
   enrollments: ChildEnrollment[];
   teacherAssessments: TeacherAssessment[];
   parentAssessments: ParentAssessment[];
+  asebaAssessments: AsebaAssessment[];
   alignments: AlignmentResult[];
   referralDecisions: ReferralDecision[];
   followUps: FollowUp[];

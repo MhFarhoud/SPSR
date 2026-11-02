@@ -4,7 +4,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Tabs, Tab } from "../components/ui/Tabs";
 import { Badge } from "../components/ui/Badge";
 import { AssessmentScoreSummary, ASSESSMENT_SCALE_NAMES } from "../components/AssessmentScoreSummary";
-import { Child, User, TeacherAssessment, ParentAssessment, AlignmentResult, FollowUp, Center, ClassGroup, ActionItem } from "../types";
+import { Child, User, TeacherAssessment, ParentAssessment, AlignmentResult, FollowUp, Center, ClassGroup, ActionItem, AsebaAssessment } from "../types";
 import { User as UserIcon, Activity, FileText, CheckSquare, Target, Settings, Plus, ListTodo, AlertTriangle, Pencil, X, Trash2 } from "lucide-react";
 import { calculateExactAge } from "../utils/ageCalculator";
 
@@ -18,6 +18,7 @@ export function ChildProfile({ user }: { user?: User }) {
   
   const [teacherForms, setTeacherForms] = useState<TeacherAssessment[]>([]);
   const [parentForms, setParentForms] = useState<ParentAssessment[]>([]);
+  const [asebaForms, setAsebaForms] = useState<AsebaAssessment[]>([]);
   const [alignments, setAlignments] = useState<AlignmentResult[]>([]);
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
   const [actions, setActions] = useState<ActionItem[]>([]);
@@ -39,6 +40,7 @@ export function ChildProfile({ user }: { user?: User }) {
       setAllUsers(d.users || []);
       setTeacherForms(d.teacherAssessments?.filter(f => f.childId === id) || []);
       setParentForms(d.parentAssessments?.filter(f => f.childId === id) || []);
+      setAsebaForms(d.asebaAssessments?.filter(f => f.childId === id) || []);
       const childAlignments = d.alignments?.filter(a => a.childId === id) || [];
       setAlignments(childAlignments);
       setAlignmentChoices(Object.fromEntries(childAlignments.map(item => [item.id, item.finalPath || item.suggestedPath])));
@@ -140,6 +142,16 @@ export function ChildProfile({ user }: { user?: User }) {
     const data = await fetchData();
     setParentForms(data.parentAssessments?.filter(item => item.childId === id) || []);
     setAlignments(data.alignments?.filter(item => item.childId === id) || []);
+  };
+
+  const deleteAsebaForm = async (form: AsebaAssessment) => {
+    if (!window.confirm(`فرم جامع ${form.formType} حذف شود؟ اقدام تخصصی متصل به آن نیز حذف خواهد شد.`)) return;
+    const response = await fetch(`/api/assessments/aseba/${encodeURIComponent(form.id)}`, { method: "DELETE" });
+    const result = await response.json();
+    if (!response.ok || !result.success) { window.alert(result.message || "حذف فرم انجام نشد."); return; }
+    const data = await fetchData();
+    setAsebaForms(data.asebaAssessments?.filter(item => item.childId === id) || []);
+    setActions(data.actionItems?.filter(item => item.childId === id) || []);
   };
 
   const toggleUrgentAction = async () => {
@@ -327,13 +339,9 @@ export function ChildProfile({ user }: { user?: User }) {
                 >
                   <Plus className="w-4 h-4" /> فرم مربی (TPCS)
                 </button>
+                <button onClick={() => navigate(`/child/${child.id}/aseba?type=TRF`)} className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors"><Plus className="w-4 h-4" /> فرم جامع مربی (TRF)</button>
                 {user?.role !== "مربی" && (
-                  <button 
-                    onClick={() => navigate(`/child/${child.id}/parent-form`)}
-                    className="flex items-center gap-1 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-100 transition-colors"
-                  >
-                    <Plus className="w-4 h-4" /> فرم والد (PPCS)
-                  </button>
+                  <><button onClick={() => navigate(`/child/${child.id}/parent-form`)} className="flex items-center gap-1 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-100 transition-colors"><Plus className="w-4 h-4" /> فرم والد (PPCS)</button><button onClick={() => navigate(`/child/${child.id}/aseba?type=CBCL`)} className="flex items-center gap-1 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-sm font-medium hover:bg-emerald-100 transition-colors"><Plus className="w-4 h-4" /> فرم جامع والد (CBCL)</button></>
                 )}
               </div>
             </div>
@@ -443,6 +451,27 @@ export function ChildProfile({ user }: { user?: User }) {
                 </div>
               )}
             </div>
+
+            {user?.role === "مربی" && <div className="space-y-4">
+              <h4 className="border-b pb-2 font-bold text-gray-900">فرم‌های جامع TRF من</h4>
+              {asebaForms.length === 0 ? <p className="rounded-lg border border-dashed p-6 text-center text-sm text-gray-500">فرم جامع TRF برای این کودک ثبت نشده است.</p> : asebaForms.map(form => <article key={form.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                <div><span className="rounded bg-blue-50 px-2 py-1 text-sm font-bold text-blue-700">TRF</span><p className="mt-2 text-sm text-gray-500">ثبت: {new Date(form.submittedAt).toLocaleString("fa-IR")}</p></div>
+                <div className="flex gap-2"><button type="button" onClick={() => navigate(`/child/${child.id}/aseba?type=TRF&edit=${encodeURIComponent(form.id)}`)} className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 px-3 py-1.5 text-sm text-indigo-700"><Pencil className="h-4 w-4" /> ویرایش</button><button type="button" onClick={() => void deleteAsebaForm(form)} className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-700"><Trash2 className="h-4 w-4" /> حذف</button></div>
+              </article>)}
+              <p className="text-xs text-gray-500">نتایج و نمره‌های روان‌سنجی طبق سطح دسترسی مربی نمایش داده نمی‌شوند.</p>
+            </div>}
+
+            {user?.role !== "مربی" && <div className="space-y-4">
+              <h4 className="border-b pb-2 font-bold text-gray-900">خروجی فرم‌های جامع CBCL و TRF</h4>
+              {asebaForms.length === 0 ? <p className="rounded-lg border border-dashed p-6 text-center text-sm text-gray-500">فرم جامع ثبت نشده است.</p> : asebaForms.map(form => <article key={form.id} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3"><div><span className={`rounded px-2 py-1 text-sm font-bold ${form.formType === "CBCL" ? "bg-emerald-50 text-emerald-700" : "bg-blue-50 text-blue-700"}`}>{form.formType}</span><p className="mt-2 text-sm text-gray-500">ثبت: {new Date(form.submittedAt).toLocaleString("fa-IR")}</p></div><div className="flex gap-2"><button type="button" onClick={() => navigate(`/child/${child.id}/aseba?type=${form.formType}&edit=${encodeURIComponent(form.id)}`)} className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 px-3 py-1.5 text-sm text-indigo-700"><Pencil className="h-4 w-4" /> ویرایش فرم</button><button type="button" onClick={() => void deleteAsebaForm(form)} className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-700"><Trash2 className="h-4 w-4" /> حذف فرم</button></div></div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{form.score.subscales.map(scale => <div key={scale.key} className="rounded-lg bg-gray-50 p-3"><p className="text-xs text-gray-500">{scale.label}</p><p className="mt-1 font-bold">{scale.score} از {scale.max}</p></div>)}</div>
+                {!!form.score.attentionSubscales.length && <div className="mt-4 grid gap-3 sm:grid-cols-2">{form.score.attentionSubscales.map(scale => <div key={scale.key} className="rounded-lg border border-blue-100 bg-blue-50 p-3"><p className="text-xs text-blue-700">{scale.label}</p><p className="mt-1 font-bold">{scale.score} از {scale.max}</p></div>)}</div>}
+                <div className="mt-4 grid gap-3 md:grid-cols-3">{form.score.indices.map(scale => <div key={scale.key} className="rounded-lg border border-indigo-100 bg-indigo-50 p-4"><p className="text-sm text-indigo-800">{scale.label}</p><p className="mt-1 text-lg font-bold">{scale.score} از {scale.max}</p>{scale.level && <Badge variant={scale.level === "نابهنجار" ? "danger" : scale.level === "مرزی" ? "warning" : "success"}>{scale.level}</Badge>}</div>)}</div>
+                {form.score.adaptiveScores && <div className="mt-4 rounded-lg bg-emerald-50 p-4 text-sm text-emerald-900"><strong>عملکرد انطباقی کل:</strong> {form.score.adaptiveScores.total} از ۲۸ · مؤلفه‌ها: {form.score.adaptiveScores.components.join("، ")}</div>}
+                {(form.score.rapidReviewFlags.length > 0 || form.score.specialistFlags.length > 0) && <div className="mt-4 grid gap-3 md:grid-cols-2">{form.score.rapidReviewFlags.length > 0 && <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800"><strong>نیازمند بررسی سریع:</strong> گویه‌های {form.score.rapidReviewFlags.map(flag => flag.questionId).join("، ")}</div>}{form.score.specialistFlags.length > 0 && <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><strong>نیازمند توجه تخصصی:</strong> گویه‌های {form.score.specialistFlags.map(flag => flag.questionId).join("، ")}</div>}</div>}
+              </article>)}
+            </div>}
           </div>
         )}
 

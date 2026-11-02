@@ -16,6 +16,7 @@ import { TeacherForm } from "./pages/TeacherForm";
 import { ParentForm } from "./pages/ParentForm";
 import { PublicParentForm } from "./pages/PublicParentForm";
 import { FollowUpForm } from "./pages/FollowUpForm";
+import { AsebaForm } from "./pages/AsebaForm";
 import { AssessmentsModule } from "./pages/Assessments";
 import { CasesModule } from "./pages/Cases";
 import { CentersModule } from "./pages/Centers";
@@ -100,8 +101,9 @@ export default function App() {
               {user.role !== "مربی" && <Route path="/children" element={<ChildrenList user={user} />} />}
               {user.role !== "مربی" && <Route path="/children/new" element={<ChildRegistration user={user} />} />}
               {user.role !== "مربی" && <Route path="/children/import" element={<ImportExcel user={user} />} />}
-              {user.role !== "مربی" && <Route path="/child/:id" element={<ChildProfile user={user} />} />}
+              <Route path="/child/:id" element={<ChildProfile user={user} />} />
               <Route path="/child/:id/form" element={<TeacherForm user={user} />} />
+              <Route path="/child/:id/aseba" element={<AsebaForm user={user} />} />
               {user.role === "مربی" && <Route path="/child/:id/followup/new" element={<FollowUpForm user={user} />} />}
               {user.role !== "مربی" && <Route path="/child/:id/parent-form" element={<ParentForm user={user} />} />}
               {user.role !== "مربی" && <Route path="/child/:id/followup/new" element={<FollowUpForm user={user} />} />}

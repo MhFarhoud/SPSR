@@ -4,11 +4,101 @@ import { calculateTPCS, calculatePPCS, calculateImpactScore } from "../scoringEn
 import { compareAssessments } from "../alignmentEngine";
 import { compareFollowUp, suggestFollowUpPath } from "../followUpEngine";
 import { FOLLOW_UP_SCALES, followUpScaleLevel, scoreFollowUpScale } from "../../followUpScales";
+import { calculateAseba, isCompleteAseba } from "../../domain/aseba";
+import type { AsebaAssessment, AsebaFormType } from "../../types";
 import { v4 as uuidv4 } from "uuid";
 import { getSessionUser } from "../auth";
 import { canViewChildRecord } from "../access";
 
 export const assessmentsRouter = express.Router();
+
+assessmentsRouter.post("/aseba", (req, res) => {
+  const actor = getSessionUser(req);
+  if (!actor || ["والد", "درمانگر"].includes(actor.role)) return res.status(403).json({ success: false, message: "اجازه ثبت این فرم را ندارید." });
+  const body = req.body as Partial<AsebaAssessment>;
+  const formType = body.formType as AsebaFormType;
+  if (!['CBCL', 'TRF'].includes(formType)) return res.status(400).json({ success: false, message: "نوع فرم معتبر نیست." });
+  if (actor.role === "مربی" && formType !== "TRF") return res.status(403).json({ success: false, message: "مربی فقط می‌تواند فرم TRF را تکمیل کند." });
+  const child = db.data.children.find(item => item.id === body.childId);
+  if (!child || !canViewChildRecord(actor, child)) return res.status(403).json({ success: false, message: "کودک در محدوده دسترسی شما نیست." });
+  if (!Array.isArray(body.answers) || !isCompleteAseba({ answers: body.answers })) return res.status(400).json({ success: false, message: "پاسخ هر ۱۱۳ گویه و ۸ زیرگویه جسمانی باید ثبت شود." });
+  if (body.answers.some(answer => ![0,1,2].includes(Number(answer.answerValue)))) return res.status(400).json({ success: false, message: "مقدار پاسخ گویه معتبر نیست." });
+  if (formType === "TRF" && (!Array.isArray(body.adaptiveScores) || body.adaptiveScores.length !== 4 || body.adaptiveScores.some(value => !Number.isInteger(Number(value)) || Number(value) < 1 || Number(value) > 7))) {
+    return res.status(400).json({ success: false, message: "چهار مؤلفه عملکرد انطباقی باید با نمره ۱ تا ۷ ثبت شوند." });
+  }
+  const existingIndex = db.data.asebaAssessments.findIndex(item => item.id === body.id);
+  const now = new Date().toISOString();
+  const assessment: AsebaAssessment = {
+    id: existingIndex >= 0 ? db.data.asebaAssessments[existingIndex].id : body.id || uuidv4(),
+    childId: child.id,
+    respondentId: actor.id,
+    formType,
+    formVersion: "1.0.0",
+    status: "SUBMITTED",
+    answers: body.answers,
+    adaptiveScores: formType === "TRF" ? body.adaptiveScores?.map(Number) : undefined,
+    score: calculateAseba(formType, body.answers, child.gender, body.adaptiveScores?.map(Number)),
+    createdAt: existingIndex >= 0 ? db.data.asebaAssessments[existingIndex].createdAt : now,
+    submittedAt: now,
+  };
+  if (existingIndex >= 0) {
+    if (db.data.asebaAssessments[existingIndex].childId !== child.id || db.data.asebaAssessments[existingIndex].formType !== formType) return res.status(400).json({ success: false, message: "انتقال فرم به کودک یا نوع دیگر مجاز نیست." });
+    db.data.asebaAssessments[existingIndex] = assessment;
+  } else db.data.asebaAssessments.push(assessment);
+
+  const existingReviewTaskIndex = db.data.actionItems.findIndex(item => item.sourceId === assessment.id && item.caseStage === "بررسی جامع ASEBA");
+  const needsRapidReview = assessment.score.rapidReviewFlags.length > 0;
+  const needsSpecialistReview = assessment.score.specialistFlags.length > 0;
+  if (needsRapidReview || needsSpecialistReview) {
+    const responsible = db.data.users.find(user => user.role === "تیم_تخصصی" && user.isActive !== false)
+      || db.data.users.find(user => user.role === "ادمین" && user.isActive !== false)
+      || actor;
+    const flaggedQuestions = [...new Set([
+      ...assessment.score.rapidReviewFlags.map(flag => flag.questionId),
+      ...assessment.score.specialistFlags.map(flag => flag.questionId),
+    ])].sort((a, b) => a - b);
+    const dueDate = new Date(Date.now() + (needsRapidReview ? 24 : 72) * 60 * 60 * 1000).toISOString();
+    const reviewTask = {
+      id: existingReviewTaskIndex >= 0 ? db.data.actionItems[existingReviewTaskIndex].id : uuidv4(),
+      childId: child.id,
+      sourceId: assessment.id,
+      action: `${needsRapidReview ? "بررسی سریع" : "بررسی تخصصی"} خروجی ${formType}؛ گویه‌های علامت‌دار: ${flaggedQuestions.join("، ")}`,
+      responsiblePersonId: responsible.id,
+      creatorId: actor.id,
+      taskType: "اقدام اجرایی" as const,
+      caseStage: "بررسی جامع ASEBA",
+      dueDate,
+      status: "نیازمند_بازبینی" as const,
+      createdAt: existingReviewTaskIndex >= 0 ? db.data.actionItems[existingReviewTaskIndex].createdAt : now,
+    };
+    if (existingReviewTaskIndex >= 0) db.data.actionItems[existingReviewTaskIndex] = reviewTask;
+    else db.data.actionItems.push(reviewTask);
+  } else if (existingReviewTaskIndex >= 0) {
+    db.data.actionItems.splice(existingReviewTaskIndex, 1);
+  }
+  db.data.auditLogs.push({ id: uuidv4(), entityType: "Assessment", entityId: assessment.id, action: existingIndex >= 0 ? "UPDATE" : "SUBMIT", userId: actor.id, timestamp: now, details: `فرم ${formType} برای کودک ${child.childId || child.id} ثبت شد.` });
+  db.persist();
+  res.json({ success: true, assessment });
+});
+
+assessmentsRouter.delete("/aseba/:id", (req, res) => {
+  const actor = getSessionUser(req);
+  if (!actor) return res.status(401).json({ success: false, message: "برای حذف فرم وارد سامانه شوید." });
+  const index = db.data.asebaAssessments.findIndex(item => item.id === req.params.id);
+  if (index < 0) return res.status(404).json({ success: false, message: "فرم جامع پیدا نشد." });
+  const assessment = db.data.asebaAssessments[index];
+  const child = db.data.children.find(item => item.id === assessment.childId);
+  const canManage = ["ادمین", "تیم_تخصصی", "سرمربی", "سوپروایزر"].includes(actor.role);
+  const isOwnTeacherForm = actor.role === "مربی" && assessment.formType === "TRF" && assessment.respondentId === actor.id;
+  if ((!canManage && !isOwnTeacherForm) || !child || !canViewChildRecord(actor, child)) {
+    return res.status(403).json({ success: false, message: "اجازه حذف این فرم را ندارید." });
+  }
+  db.data.asebaAssessments.splice(index, 1);
+  db.data.actionItems = db.data.actionItems.filter(item => item.sourceId !== assessment.id);
+  db.data.auditLogs.push({ id: uuidv4(), entityType: "Assessment", entityId: assessment.id, action: "DELETE", userId: actor.id, timestamp: new Date().toISOString(), details: `فرم جامع ${assessment.formType} برای کودک ${child.childId || child.id} حذف شد.` });
+  db.persist();
+  res.json({ success: true });
+});
 
 function hasCompletePrimaryAnswers(answers: unknown): boolean {
   if (!Array.isArray(answers) || answers.length !== 25) return false;

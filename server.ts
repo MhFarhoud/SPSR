@@ -46,6 +46,7 @@ const defaultData = {
   ],
   teacherForms: [],
   parentForms: [],
+  asebaAssessments: [],
   followUps: [],
   rules: {
     level4: { totalCutoff: 17, minDomainAbnormal: 1, distressHigh: true },

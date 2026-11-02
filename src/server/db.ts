@@ -49,7 +49,7 @@ export class Database {
       // Return default empty state if missing, though it should exist
       return {
         users: [], centers: [], classes: [], children: [], enrollments: [],
-        teacherAssessments: [], parentAssessments: [], alignments: [],
+        teacherAssessments: [], parentAssessments: [], asebaAssessments: [], alignments: [],
         referralDecisions: [], followUps: [], followUpComparisons: [],
         actionItems: [], auditLogs: [], formVersions: [], permissions: {}
       };
@@ -64,6 +64,7 @@ export class Database {
       enrollments: raw.enrollments || [],
       teacherAssessments: raw.teacherAssessments || raw.teacherForms || [],
       parentAssessments: raw.parentAssessments || raw.parentForms || [],
+      asebaAssessments: raw.asebaAssessments || [],
       alignments: raw.alignments || [],
       referralDecisions: raw.referralDecisions || [],
       followUps: raw.followUps || [],

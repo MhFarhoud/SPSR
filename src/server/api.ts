@@ -274,6 +274,7 @@ apiRouter.get("/data", (req, res) => {
     ...(isCenterScoped || isHeadCoach ? {
       teacherAssessments: data.teacherAssessments.filter(form => visibleChildIds.has(form.childId)),
       parentAssessments: data.parentAssessments.filter(form => visibleChildIds.has(form.childId)),
+      asebaAssessments: data.asebaAssessments.filter(form => visibleChildIds.has(form.childId)),
       alignments: data.alignments.filter(item => visibleChildIds.has(item.childId)),
       followUps: visibleFollowUps,
       followUpComparisons: data.followUpComparisons.filter(item => visibleFollowUpIds.has(item.followUpId)),
@@ -292,6 +293,12 @@ apiRouter.get("/data", (req, res) => {
           return ownFormWithoutResult;
         }),
       parentAssessments: [],
+      asebaAssessments: data.asebaAssessments
+        .filter(assessment => assessment.formType === "TRF" && assessment.respondentId === viewer.id && visibleChildIds.has(assessment.childId))
+        .map(assessment => {
+          const { score, ...ownFormWithoutResult } = assessment;
+          return ownFormWithoutResult;
+        }),
       alignments: [],
       followUps: [],
       followUpComparisons: [],
@@ -333,7 +340,7 @@ apiRouter.post("/data/reset", async (req, res) => {
   db.data = {
     users: db.data.users.filter(user => user.role === "ادمین"),
     centers: [], classes: [], children: [], enrollments: [],
-    teacherAssessments: [], parentAssessments: [], alignments: [],
+    teacherAssessments: [], parentAssessments: [], asebaAssessments: [], alignments: [],
     referralDecisions: [], followUps: [], followUpComparisons: [],
     actionItems: [], auditLogs: [], formVersions: [], permissions: {}
   };
