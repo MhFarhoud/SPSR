@@ -178,10 +178,10 @@ export function AdminPanel() {
   };
 
   const renderCenterAssignment = (selectedIds: string[], onChange: (centerIds: string[]) => void) => (
-    <fieldset className="md:col-span-2 rounded-lg border border-gray-200 p-3">
+    <fieldset className="min-h-0 md:col-span-2 rounded-lg border border-gray-200 p-3">
       <legend className="px-1 text-sm font-medium text-gray-700">مراکز تحت پوشش</legend>
       {centers.length === 0 ? <p className="text-xs text-amber-700">ابتدا یک مرکز در بخش مدیریت مراکز بسازید.</p> : (
-        <div className="flex flex-wrap gap-x-5 gap-y-2">
+        <div className="max-h-64 overflow-y-auto overscroll-contain rounded-md pr-1 flex flex-wrap content-start gap-x-5 gap-y-2">
           {centers.map(center => (
             <label key={center.id} className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
               <input type="checkbox" checked={selectedIds.includes(center.id)} onChange={event => onChange(event.target.checked ? [...selectedIds, center.id] : selectedIds.filter(id => id !== center.id))} className="rounded text-indigo-600" />
@@ -229,10 +229,11 @@ export function AdminPanel() {
 
         {/* Edit User Modal */}
         {editingUserId && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl p-6 w-full max-w-2xl">
-              <h3 className="text-lg font-bold mb-4">ویرایش اطلاعات کاربر</h3>
-              <form onSubmit={handleSaveEditUser} className="space-y-4">
+          <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-black/50 p-4 sm:items-center" role="dialog" aria-modal="true" aria-labelledby="edit-user-title">
+            <div className="my-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
+              <h3 id="edit-user-title" className="shrink-0 border-b border-gray-100 px-6 py-4 text-lg font-bold">ویرایش اطلاعات کاربر</h3>
+              <form onSubmit={handleSaveEditUser} className="min-h-0 overflow-y-auto px-6 py-4">
+                <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">نام و نام خانوادگی</label>
                   <input required value={editFullName} onChange={e => setEditFullName(e.target.value)} className="w-full p-2 border rounded-lg" />
@@ -252,7 +253,8 @@ export function AdminPanel() {
                   </select>
                 </div>
                 {renderCenterAssignment(editCenterIds, setEditCenterIds)}
-                <div className="flex gap-2 pt-2">
+                </div>
+                <div className="sticky bottom-0 -mx-6 mt-4 flex gap-2 border-t border-gray-100 bg-white px-6 pb-2 pt-4">
                   <button type="submit" className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-medium hover:bg-indigo-700">ذخیره تغییرات</button>
                   <button type="button" onClick={() => setEditingUserId(null)} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg font-medium hover:bg-gray-200">انصراف</button>
                 </div>
