@@ -4,7 +4,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Tabs, Tab } from "../components/ui/Tabs";
 import { Badge } from "../components/ui/Badge";
 import { AssessmentScoreSummary, ASSESSMENT_SCALE_NAMES } from "../components/AssessmentScoreSummary";
-import { Child, User, TeacherAssessment, ParentAssessment, AlignmentResult, FollowUp, Center, ClassGroup, ActionItem, AsebaAssessment } from "../types";
+import { Child, User, TeacherAssessment, ParentAssessment, AlignmentResult, FollowUp, FollowUpComparison, Center, ClassGroup, ActionItem, AsebaAssessment } from "../types";
 import { User as UserIcon, Activity, FileText, CheckSquare, Target, Settings, Plus, ListTodo, AlertTriangle, Pencil, X, Trash2 } from "lucide-react";
 import { calculateExactAge } from "../utils/ageCalculator";
 
@@ -21,6 +21,7 @@ export function ChildProfile({ user }: { user?: User }) {
   const [asebaForms, setAsebaForms] = useState<AsebaAssessment[]>([]);
   const [alignments, setAlignments] = useState<AlignmentResult[]>([]);
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
+  const [followUpComparisons, setFollowUpComparisons] = useState<FollowUpComparison[]>([]);
   const [actions, setActions] = useState<ActionItem[]>([]);
   const [timeline, setTimeline] = useState<any[]>([]);
   const [centers, setCenters] = useState<Center[]>([]);
@@ -46,6 +47,8 @@ export function ChildProfile({ user }: { user?: User }) {
       setAlignmentChoices(Object.fromEntries(childAlignments.map(item => [item.id, item.finalPath || item.suggestedPath])));
       setAlignmentReasons(Object.fromEntries(childAlignments.map(item => [item.id, item.decisionReason || ""])));
       setFollowUps(d.followUps?.filter(f => f.childId === id) || []);
+      const childFollowUpIds = new Set((d.followUps || []).filter(f => f.childId === id).map(f => f.id));
+      setFollowUpComparisons(d.followUpComparisons?.filter(comparison => childFollowUpIds.has(comparison.followUpId)) || []);
       setActions(d.actionItems?.filter(a => a.childId === id) || []);
       
       const tl = d.auditLogs?.filter(t => t.entityId === id) || [];
@@ -572,6 +575,10 @@ export function ChildProfile({ user }: { user?: User }) {
                   {followUps.map((fu, idx) => {
                     const registrar = allUsers.find(item => item.id === fu.teacherId);
                     const sourceAction = actions.find(item => item.id === fu.actionItemId);
+                    const responsiblePerson = allUsers.find(item => item.id === sourceAction?.responsiblePersonId);
+                    const comparisons = followUpComparisons.filter(item => item.followUpId === fu.id);
+                    const childCenter = centers.find(item => item.id === child.currentCenterId);
+                    const childClass = classes.find(item => item.id === child.currentClassId);
                     const baselineForm = fu.previousAssessmentType === "PPCS"
                       ? parentForms.find(item => item.id === fu.previousAssessmentId)
                       : teacherForms.find(item => item.id === fu.previousAssessmentId);
@@ -582,7 +589,7 @@ export function ChildProfile({ user }: { user?: User }) {
                     const detailCard = (label: string, value?: React.ReactNode, emphasis = "") => (
                       <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
                         <span className="mb-1 block text-xs text-gray-500">{label}</span>
-                        <span className={`text-sm font-medium text-gray-900 ${emphasis}`}>{value || "ثبت نشده"}</span>
+                        <span className={`break-words text-sm font-medium text-gray-900 ${emphasis}`}>{value === undefined || value === null || value === "" ? "ثبت نشده" : value}</span>
                       </div>
                     );
                     return (
@@ -601,14 +608,29 @@ export function ChildProfile({ user }: { user?: User }) {
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                           {detailCard("دلیل شروع فالوآپ", fu.triggerReason)}
                           {detailCard("ثبت‌کننده", registrar?.fullName)}
-                          {detailCard("تاریخ ثبت", new Date(submittedDate).toLocaleDateString("fa-IR"))}
+                          {detailCard("تاریخ و ساعت ثبت", new Date(submittedDate).toLocaleString("fa-IR"))}
                           {detailCard("نسخه فرم", fu.formVersion)}
+                          {detailCard("شناسه پیگیری فرم", fu.id)}
+                          {detailCard("شماره پرونده کودک", child.childId || child.id)}
+                          {detailCard("مرکز", childCenter?.name)}
+                          {detailCard("کلاس", childClass?.name)}
                           {detailCard("نوع ارزیابی پایه", fu.previousAssessmentType === "TPCS" ? "فرم مربی (TPCS)" : fu.previousAssessmentType === "PPCS" ? "فرم والد (PPCS)" : undefined)}
                           {detailCard("تاریخ ارزیابی پایه", baselineForm ? new Date(baselineForm.createdAt).toLocaleDateString("fa-IR") : undefined)}
+                          {detailCard("شناسه ارزیابی پایه", fu.previousAssessmentId)}
                           {detailCard("وظیفه مرتبط", sourceAction?.action)}
                           {detailCard("وضعیت فرم", statusLabel)}
                         </div>
                       </div>
+
+                      {baselineForm?.score && (
+                        <section className="mb-4 rounded-xl border border-cyan-100 bg-cyan-50/50 p-4">
+                          <h5 className="mb-3 text-sm font-bold text-cyan-950">خلاصه ارزیابی مبنای فالوآپ</h5>
+                          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                            {detailCard("نمره کل مشکلات", `${baselineForm.score.totalDifficultiesScore} · ${baselineForm.score.overallLevel}`)}
+                            {baselineForm.score.subscales.map(scale => detailCard(scale.domain, `${scale.score} · ${scale.level}`))}
+                          </div>
+                        </section>
+                      )}
 
                       <h5 className="mb-2 text-sm font-bold text-gray-800">اجرا و نتیجه کلی</h5>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
@@ -636,6 +658,29 @@ export function ChildProfile({ user }: { user?: User }) {
                         </div>
                       )}
 
+                      {comparisons.length > 0 && (
+                        <section className="mt-4 rounded-xl border border-violet-200 bg-violet-50/40 p-4">
+                          <h5 className="mb-3 text-sm font-bold text-violet-950">مقایسه کامل با ارزیابی یا فالوآپ مبنا</h5>
+                          <div className="space-y-3">
+                            {comparisons.map((comparison, comparisonIndex) => <div key={`${comparison.followUpId}-${comparison.domain || comparisonIndex}`} className="rounded-lg border border-violet-100 bg-white p-4">
+                              <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><strong className="text-sm text-violet-950">{comparison.domain || "نتیجه کلی"}</strong><Badge variant={comparison.direction === "بهبود" ? "success" : comparison.direction === "تشدید" ? "danger" : "warning"}>{comparison.resultCategory}</Badge></div>
+                              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                {detailCard("نمره اولیه", comparison.initialScore)}
+                                {detailCard("نمره فالوآپ", comparison.followUpScore)}
+                                {detailCard("میزان تغییر", comparison.delta)}
+                                {detailCard("جهت تغییر", comparison.direction)}
+                                {detailCard("سطح قبل", comparison.levelBefore)}
+                                {detailCard("سطح بعد", comparison.levelAfter)}
+                                {detailCard("رفتار قبل", comparison.behaviorBefore)}
+                                {detailCard("رفتار بعد", comparison.behaviorAfter)}
+                                {detailCard("تغییر پریشانی", comparison.distressBeforeAfter)}
+                                {detailCard("تغییر اثر عملکردی", comparison.functionalImpactBeforeAfter)}
+                              </div>
+                            </div>)}
+                          </div>
+                        </section>
+                      )}
+
                       <div className="mt-4 grid gap-4 lg:grid-cols-2">
                         <section className="rounded-xl border border-gray-200 p-4">
                           <h5 className="mb-3 text-sm font-bold text-gray-800">اقدامات مرکز</h5>
@@ -660,6 +705,7 @@ export function ChildProfile({ user }: { user?: User }) {
 
                       {fu.additionalObservation && <p className="mt-4 whitespace-pre-wrap rounded-lg bg-blue-50 p-3 text-sm text-blue-900"><strong>مشاهدهٔ تکمیلی:</strong> {fu.additionalObservation}</p>}
                       {fu.freeTextNotes && <p className="mt-3 whitespace-pre-wrap rounded-lg bg-amber-50 p-3 text-sm text-amber-950"><strong>توضیحات تکمیلی:</strong> {fu.freeTextNotes}</p>}
+                      {sourceAction && <section className="mt-3 rounded-xl border border-emerald-100 bg-emerald-50/50 p-4"><h5 className="mb-3 text-sm font-bold text-emerald-950">جزئیات وظیفه و اقدام مرتبط</h5><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{detailCard("عنوان اقدام", sourceAction.action)}{detailCard("نوع وظیفه", sourceAction.taskType)}{detailCard("مرحله پرونده", sourceAction.caseStage)}{detailCard("مسئول اجرا", responsiblePerson?.fullName)}{detailCard("حوزه هدف وظیفه", sourceAction.targetDomain)}{detailCard("موعد انجام", sourceAction.dueDate ? new Date(sourceAction.dueDate).toLocaleString("fa-IR") : undefined)}{detailCard("وضعیت اقدام", sourceAction.status.replaceAll("_", " "))}{detailCard("نتیجه ثبت‌شده اقدام", sourceAction.resultNotes)}{detailCard("زمان شروع اقدام", sourceAction.startedAt ? new Date(sourceAction.startedAt).toLocaleString("fa-IR") : undefined)}{detailCard("زمان تکمیل اقدام", sourceAction.completedAt ? new Date(sourceAction.completedAt).toLocaleString("fa-IR") : undefined)}{detailCard("فالوآپ بعدی", sourceAction.nextFollowUpDate ? new Date(sourceAction.nextFollowUpDate).toLocaleDateString("fa-IR") : undefined)}</div></section>}
                       <div className="mt-3 rounded-lg border border-violet-100 bg-violet-50 p-3 text-sm text-violet-950"><strong>تصمیم سرمربی یا تیم تخصصی:</strong> {fu.specialistDecision || "ثبت نشده"}</div>
                       {canManageChild && <div className="mt-3 flex justify-end border-t pt-3"><button type="button" onClick={() => navigate(`/child/${child.id}/followup/new?edit=${encodeURIComponent(fu.id)}`)} className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 px-3 py-1.5 text-sm text-indigo-700 hover:bg-indigo-50"><Pencil className="h-4 w-4" /> ویرایش فرم فالوآپ</button></div>}
                     </div>
